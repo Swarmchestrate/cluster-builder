@@ -1,6 +1,7 @@
 import jinja2
 import os
 import subprocess
+import hcl
 
 class Swarmchestrate:
     def __init__(self, template_dir, output_dir,tfvars_file=None, variables=None):
