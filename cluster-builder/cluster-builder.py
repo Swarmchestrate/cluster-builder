@@ -10,7 +10,7 @@ class Swarmchestrate:
         """
         self.template_dir = template_dir
         self.output_dir = output_dir
-          if tfvars_file:
+        if tfvars_file:
             self.variables = self.load_variables_from_tfvars(tfvars_file)
         else:
             self.variables = variables
