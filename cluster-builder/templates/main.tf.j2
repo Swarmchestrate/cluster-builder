@@ -1,0 +1,59 @@
+resource "random_string" "cluster_name" {
+  length  = 6
+  special = false
+  upper   = false
+}
+
+variable "cluster_name" {
+  default = "swarmchestrate-${random_string.cluster_name.result}"
+}
+
+
+provider "aws" {
+  region = "{{ aws_region }}"
+}
+
+# Reference the existing security group
+data "aws_security_group" "existing_sg" {
+  id = "{{ security_group_id }}"  
+}
+
+# Master node
+resource "aws_instance" "k3s_master" {
+  ami           = "{{ ami }}"  
+  instance_type = "{{ instance_type }}"
+  key_name      = "{{ ssh_key_name }}"
+
+  # Attach the custom security group
+  security_group_ids = [data.aws_security_group.existing_sg.id]
+
+  user_data = templatefile("user_data_master.sh.tpl", {
+    k3s_token = "{{ k3s_token }}"
+  })
+
+  tags = {
+    Name = "K3s-Master-Node-${cluster_name}"
+    ClusterName = var.cluster_name
+  }
+}
+
+# HA nodes
+resource "aws_instance" "k3s_ha_servers" {
+  count         = {{ ha_server_count }}
+  ami           = "{{ ami }}"  
+  instance_type = "{{ instance_type }}"
+  key_name      = "{{ ssh_key_name }}"
+
+  # Attach the custom security group
+  security_group_ids = [data.aws_security_group.existing_sg.id]
+
+  user_data = templatefile("user_data_ha_server.sh.tpl", {
+    k3s_token = "{{ k3s_token }}",
+    master_ip = "{{ master_ip }}"
+  })
+
+  tags = {
+    Name = "K3s-HA-Server-${count.index + 1}-${cluster_name}"
+    ClusterName = var.cluster_name
+  }
+}
