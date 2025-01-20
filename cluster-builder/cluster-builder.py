@@ -1,7 +1,7 @@
 import jinja2
 import os
 import subprocess
-import hcl
+import hcl2
 
 class Swarmchestrate:
     def __init__(self, template_dir, output_dir,tfvars_file=None, variables=None):
@@ -22,7 +22,7 @@ class Swarmchestrate:
 
         """
         with open(tfvars_file, 'r') as f:
-            tfvars = hcl.load(f)
+            tfvars = hcl2.load(f)
         return tfvars
 
     def create(self):
@@ -58,11 +58,11 @@ class Swarmchestrate:
         Deploy the K3s cluster using OpenTofu.
         """
         print("Initializing OpenTofu...")
-        subprocess.run(["tofu", "init"], check=True)
+        subprocess.run(["tofu", "init"], check=True, cwd=self.output_dir)
         print("Planning infrastructure with OpenTofu...")
-        subprocess.run(["tofu", "plan"], check=True)
+        subprocess.run(["tofu", "plan"], check=True, cwd=self.output_dir)
         print("Applying infrastructure with OpenTofu...")
-        subprocess.run(["tofu", "apply", "-auto-approve"], check=True)
+        subprocess.run(["tofu", "apply", "-auto-approve"], check=True, cwd=self.output_dir)
   
 
     def configure(self):
@@ -73,4 +73,4 @@ class Swarmchestrate:
 
 
 swarmchestrate = Swarmchestrate(template_dir="templates", output_dir="output", tfvars_file="terraform.tfvars")
-swarmchestrate.substitute_values()
+swarmchestrate.create()
