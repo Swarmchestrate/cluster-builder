@@ -1,3 +1,4 @@
+import time
 import jinja2
 import os
 import subprocess
@@ -32,7 +33,7 @@ class Swarmchestrate:
         print("Creating K3s cluster...")
         self.substitute_values()
         self.deploy()
-        self.configure()
+        # self.configure()
 
     def substitute_values(self):
         """
@@ -71,6 +72,26 @@ class Swarmchestrate:
         """
         raise NotImplementedError
 
+    def destroy(self):
+        """
+        Destroy the deployed K3s cluster using OpenTofu.
+        """
+        print("Destroying the K3s cluster...")
+        try:
+            print("Planning destruction with OpenTofu...")
+            subprocess.run(["tofu", "plan", "-destroy"], check=True, cwd=self.output_dir)
+            print("Destroying infrastructure with OpenTofu...")
+            subprocess.run(["tofu", "destroy", "-auto-approve"], check=True, cwd=self.output_dir)
+            print("K3s cluster destroyed successfully.")
+        except subprocess.CalledProcessError as e:
+            print(f"Error during destruction: {e}")
 
 swarmchestrate = Swarmchestrate(template_dir="templates", output_dir="output", tfvars_file="terraform.tfvars")
 swarmchestrate.create()
+
+delay_seconds = 5 * 60
+print(f"Waiting for {delay_seconds / 60} minutes before destroying resources...")
+time.sleep(delay_seconds)
+
+print("Starting the destruction process...")
+swarmchestrate.destroy()

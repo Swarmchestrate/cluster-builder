@@ -41,7 +41,7 @@ resource "aws_instance" "k3s_ha_servers" {
 
   user_data = templatefile("../templates/user_data_ha_server.sh.tpl", {
     k3s_token = "{{ k3s_token }}",
-    master_ip = "{{ master_ip }}"
+    master_ip = aws_instance.k3s_master.public_ip
   })
 
   tags = {

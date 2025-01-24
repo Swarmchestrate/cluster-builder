@@ -1,7 +1,7 @@
 # creating new network security group
 
 resource "aws_security_group" "k3s_security_group" {
-  name        = "k3s-security-group"
+  name        = "k3s-security-group-${random_string.cluster_name.result}"
   description = "Security group for K3s nodes"
 
   # Inbound rules
@@ -9,49 +9,49 @@ resource "aws_security_group" "k3s_security_group" {
     from_port   = 2379
     to_port     = 2380
     protocol    = "tcp"
-    cidr_blocks = ["10.0.0.0/16"]  # Internal servers communication for embedded etcd
+    cidr_blocks = ["0.0.0.0/0"]  # Internal servers communication for embedded etcd
   }
 
   ingress {
     from_port   = 6443
     to_port     = 6443
     protocol    = "tcp"
-    cidr_blocks = ["10.0.0.0/16"]  # Agents to servers for K3s API server also required for embedded distributed registry (Spegel)
+    cidr_blocks = ["0.0.0.0/0"]  # Agents to servers for K3s API server also required for embedded distributed registry (Spegel)
   }
 
   ingress {
     from_port   = 8472
     to_port     = 8472
     protocol    = "udp"
-    cidr_blocks = ["10.0.0.0/16"]  # VXLAN communication for Flannel
+    cidr_blocks = ["0.0.0.0/0"]  # VXLAN communication for Flannel
   }
 
   ingress {
     from_port   = 10250
     to_port     = 10250
     protocol    = "tcp"
-    cidr_blocks = ["10.0.0.0/16"]  # Kubelet metrics communication
+    cidr_blocks = ["0.0.0.0/0"]  # Kubelet metrics communication
   }
 
   ingress {
     from_port   = 51820
     to_port     = 51820
     protocol    = "udp"
-    cidr_blocks = ["10.0.0.0/16"]  # Wireguard IPv4 for Flannel
+    cidr_blocks = ["0.0.0.0/0"]  # Wireguard IPv4 for Flannel
   }
 
   ingress {
     from_port   = 51821
     to_port     = 51821
     protocol    = "udp"
-    cidr_blocks = ["10.0.0.0/16"]  # Wireguard IPv6 for Flannel
+    cidr_blocks = ["0.0.0.0/0"]  # Wireguard IPv6 for Flannel
   }
 
   ingress {
     from_port   = 5001
     to_port     = 5001
     protocol    = "tcp"
-    cidr_blocks = ["10.0.0.0/16"]  # Required only for embedded distributed registry (Spegel)
+    cidr_blocks = ["0.0.0.0/0"]  # Required only for embedded distributed registry (Spegel)
   }
 
   ingress {
