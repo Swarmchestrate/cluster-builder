@@ -1,3 +1,9 @@
+variable "instance_type" {
+ type = string
+ default = "t2.micro"
+ description = "EC2 instance type"
+}
+
 resource "random_string" "cluster_name" {
   length  = 6
   special = false
@@ -11,11 +17,11 @@ provider "aws" {
 locals {
   cluster_name = "swarmchestrate-${random_string.cluster_name.result}"
 }
-
+{% if k3s_role == "master" %}
 # Master node
 resource "aws_instance" "k3s_master" {
   ami           = "{{ ami }}"  
-  instance_type = "{{ instance_type }}"
+  instance_type = var.instance_type
   key_name      = "{{ ssh_key_name }}"
 
   vpc_security_group_ids = [aws_security_group.k3s_security_group.id]
@@ -29,7 +35,9 @@ resource "aws_instance" "k3s_master" {
     ClusterName = local.cluster_name
   }
 }
+{% endif %}
 
+{% if k3s_role == "ha" %}
 # HA nodes
 resource "aws_instance" "k3s_ha_servers" {
   count         = {{ ha_server_count }}
@@ -49,3 +57,4 @@ resource "aws_instance" "k3s_ha_servers" {
     ClusterName = local.cluster_name
   }
 }
+{% endif %}

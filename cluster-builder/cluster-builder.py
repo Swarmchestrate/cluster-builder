@@ -54,17 +54,35 @@ class Swarmchestrate:
                     f.write(rendered_content)
                 print(f"Rendered template saved to: {output_path}")
 
-    def deploy(self):
+    def deploy_k3s_master(self):
         """
         Deploy the K3s cluster using OpenTofu.
         """
+        self.variables["k3s_role"] = "master"
+        self.substitute_values()
+
+
         print("Initializing OpenTofu...")
         subprocess.run(["tofu", "init"], check=True, cwd=self.output_dir)
         print("Planning infrastructure with OpenTofu...")
-        subprocess.run(["tofu", "plan"], check=True, cwd=self.output_dir)
+        subprocess.run(["tofu", "plan", "-var-file=terraform.tfvars"], check=True, cwd=self.output_dir)
         print("Applying infrastructure with OpenTofu...")
-        subprocess.run(["tofu", "apply", "-auto-approve"], check=True, cwd=self.output_dir)
-  
+        subprocess.run(["tofu", "apply", "-auto-approve", "-var-file=terraform.tfvars"], check=True, cwd=self.output_dir)
+
+    def deploy_k3s_ha(self):
+        """
+        Deploy the K3s cluster using OpenTofu.
+        """
+        self.variables["k3s_role"] = "ha"
+        self.variables["num_ha"] = 2
+        self.substitute_values()
+
+        print("Initializing OpenTofu...")
+        subprocess.run(["tofu", "init"], check=True, cwd=self.output_dir)
+        print("Planning infrastructure with OpenTofu...")
+        subprocess.run(["tofu", "plan", "-var-file=terraform.tfvars"], check=True, cwd=self.output_dir)
+        print("Applying infrastructure with OpenTofu...")
+        subprocess.run(["tofu", "apply", "-auto-approve", "-var-file=terraform.tfvars"], check=True, cwd=self.output_dir)
 
     def configure(self):
         """
