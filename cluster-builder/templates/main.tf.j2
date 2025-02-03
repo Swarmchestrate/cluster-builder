@@ -1,7 +1,53 @@
+# AWS Variables
+variable "aws_region" {
+  description = "The AWS region to deploy resources in"
+  type        = string
+  default     = "eu-west-2" # Default region is London
+}
+
+variable "ami" {
+  description = "The type of EC2 instance"
+  type        = string
+  default     = "ami-0c0493bbac867d427"
+}
+
+variable "k3s_token" {
+  description = "The type of EC2 instance"
+  type        = string
+  default     = "test"
+}
+
 variable "instance_type" {
- type = string
- default = "t2.micro"
- description = "EC2 instance type"
+  description = "The type of EC2 instance"
+  type        = string
+  default     = "t2.micro"
+}
+
+variable "ssh_key_name" {
+  description = "The name of the SSH key pair to use for EC2"
+  type        = string
+}
+
+variable "aws_ha_server_count" {
+  description = "Number of EC2 instances to create"
+  type        = number
+  default     = 1
+}
+
+variable "aws_worker_count" {
+  description = "Number of EC2 instances to create"
+  type        = number
+  default     = 1
+}
+
+variable "master_ip" {
+  description = "Number of EC2 instances to create"
+  type        = string
+}
+
+variable "cluster_name" {
+  description = "The cluster name for all nodes"
+  type        = string
 }
 
 resource "random_string" "cluster_name" {
@@ -11,7 +57,7 @@ resource "random_string" "cluster_name" {
 }
 
 provider "aws" {
-  region = "{{ aws_region }}"
+  region = var.aws_region
 }
 
 locals {
@@ -20,13 +66,13 @@ locals {
 {% if k3s_role == "master" %}
 # Master node
 resource "aws_instance" "k3s_master" {
-  ami           = "{{ ami }}"  
+  ami           = var.ami  
   instance_type = var.instance_type
-  key_name      = "{{ ssh_key_name }}"
+  key_name      = var.ssh_key_name
 
   vpc_security_group_ids = [aws_security_group.k3s_security_group.id]
 
-  user_data = templatefile("../templates/user_data_master.sh.tpl", {
+  user_data = templatefile("user_data.sh.tpl", {
     k3s_token = "{{ k3s_token }}"
   })
 
@@ -35,25 +81,57 @@ resource "aws_instance" "k3s_master" {
     ClusterName = local.cluster_name
   }
 }
+output "cluster_name" {
+  description = "The unique cluster name"
+  value       = local.cluster_name
+}
+
+output "master_ip" {
+  description = "The public IP of the master node"
+  value       = aws_instance.k3s_master.public_ip
+}
 {% endif %}
 
 {% if k3s_role == "ha" %}
 # HA nodes
 resource "aws_instance" "k3s_ha_servers" {
-  count         = {{ ha_server_count }}
-  ami           = "{{ ami }}"  
-  instance_type = "{{ instance_type }}"
-  key_name      = "{{ ssh_key_name }}"
+  count         = var.aws_ha_server_count
+  ami           = var.ami 
+  instance_type = var.instance_type
+  key_name      = var.ssh_key_name
 
   vpc_security_group_ids = [aws_security_group.k3s_security_group.id]
 
-  user_data = templatefile("../templates/user_data_ha_server.sh.tpl", {
-    k3s_token = "{{ k3s_token }}",
-    master_ip = aws_instance.k3s_master.public_ip
+  user_data = templatefile("user_data.sh.tpl", {
+    k3s_token = var.k3s_token,
+    master_ip = var.master_ip
   })
 
   tags = {
     Name = "K3s-HA-Server-${local.cluster_name}-${count.index + 1}"
+    ClusterName = local.cluster_name
+  }
+}
+{% endif %}
+
+{% if k3s_role == "worker" %}
+# Worker nodes (agents)
+resource "aws_instance" "k3s_workers" {
+  count         = var.aws_worker_count
+  ami           = var.ami
+  instance_type = var.instance_type
+  key_name      = var.ssh_key_name
+
+
+  vpc_security_group_ids = [aws_security_group.k3s_security_group.id]
+  
+  user_data = templatefile("user_data.sh.tpl", {
+    k3s_token = var.k3s_token,
+    master_ip = var.master_ip
+  })
+
+  tags = {
+    Name = "K3s-Worker-Node--${local.cluster_name}-${count.index + 1}"
     ClusterName = local.cluster_name
   }
 }

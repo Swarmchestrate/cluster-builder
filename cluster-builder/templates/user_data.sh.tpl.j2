@@ -1,0 +1,12 @@
+#!/bin/bash
+{% if k3s_role == "master" %}
+curl -sfL https://get.k3s.io | K3S_TOKEN=${k3s_token} sh -s - server --cluster-init
+{% endif %}
+
+{% if k3s_role == "ha" %}
+curl -sfL https://get.k3s.io | K3S_TOKEN=${k3s_token} sh -s - server --server https://${master_ip}:6443
+{% endif %}
+
+{% if k3s_role == "worker" %}
+curl -sfL https://get.k3s.io | K3S_TOKEN=${k3s_token} sh -s - agent --server https://${master_ip}:6443
+{% endif %}
