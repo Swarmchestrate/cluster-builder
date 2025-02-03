@@ -1,35 +1,67 @@
-import time
+# import time
 import jinja2
 import os
 import subprocess
-import hcl2
-import re
-import shutil
 
 class Swarmchestrate:
-    def __init__(self, template_dir, output_dir,tfvars_file=None, variables=None, cloud="aws"):
+    def __init__(self, template_dir, output_dir,tfvars_file=None, variables=None):
         """
         Initialize the K3sCluster class.
 
         """
-        self.template_dir = f"{template_dir}/{cloud}"
+        self.template_dir = f"{template_dir}"
         self.output_dir = output_dir
-        if tfvars_file:
-            self.variables = self.load_variables_from_tfvars(tfvars_file)
-        else:
-            self.variables = variables
+        
 
     def create(self, config):
         """
         Create a new K3s cluster with OpenTofu.
         """
         print("Creating K3s cluster...")
-        self.substitute_values()
+
         self.deploy_k3s_master(config)
-        # self.deploy_k3s_ha()
+
+        # self.deploy_k3s_ha(config)
         # self.deploy_k3s_worker()
 
-        # self.configure()
+
+    def generate_main_tf(self, config):
+        """
+        Dynamically generate main.tf based on the configuration.
+        """
+        main_tf_content = """
+module "k3s_master" {
+  source = "./k3s_master"
+}
+"""
+
+        if config.get("aws_ha_server_count", 0) > 0:
+            main_tf_content += """
+module "k3s_ha" {
+  source = "./k3s_ha"
+  master_ip         = module.k3s_master.master_ip
+  cluster_name      = module.k3s_master.cluster_name
+  security_group_id = module.k3s_master.security_group_id
+}
+"""
+
+        if config.get("aws_worker_count", 0) > 0:
+            main_tf_content += """
+module "k3s_worker" {
+  source = "./k3s_worker"
+  master_ip         = module.k3s_master.master_ip
+  cluster_name      = module.k3s_master.cluster_name
+  security_group_id = module.k3s_master.security_group_id
+}
+"""
+
+        # Only write main.tf if at least one module is included
+        if main_tf_content.strip():
+            with open(os.path.join(self.output_dir, "main.tf"), "w") as f:
+                f.write(main_tf_content.strip())
+
+            print("Generated main.tf dynamically.")
+
 
     def substitute_values(self, config, subdir=None):
         """
@@ -39,9 +71,10 @@ class Swarmchestrate:
         if not os.path.exists(out_dir):
             os.makedirs(out_dir)
 
-        env = jinja2.Environment(loader=jinja2.FileSystemLoader(self.template_dir))
+        cloud_template_dir = f"{self.template_dir}/{config['cloud']}"
+        env = jinja2.Environment(loader=jinja2.FileSystemLoader(cloud_template_dir))
         
-        for template_name in os.listdir(self.template_dir):
+        for template_name in os.listdir(cloud_template_dir):
             if subdir and "master" not in subdir and "network_security" in template_name:
                 continue
             if template_name.endswith('.j2'):
@@ -53,103 +86,60 @@ class Swarmchestrate:
                     f.write(rendered_content)
                 print(f"Rendered template saved to: {output_path}")
         
+        self.generate_main_tf(config)
         #copy main.tf to output directory
-        main_tf_path = f"{self.template_dir}/main.tf"
-        if os.path.exists(main_tf_path):
-            subprocess.run(["cp", main_tf_path, out_dir], check=True)
-            print(f"Copied main.tf to {out_dir}")
-        else:
-            print(f"Warning: main.tf not found in {self.template_dir}. Skipping copy.")
+        # main_tf_path = f"{self.template_dir}/main.tf"
+        # if os.path.exists(main_tf_path):
+        #     subprocess.run(["cp", main_tf_path, self.output_dir], check=True)
+        #     print(f"Copied main.tf to {self.output_dir}")
+        # else:
+        #     print(f"Warning: main.tf not found in {self.template_dir}. Skipping copy.")
 
 
     def deploy_k3s_master(self, config):
         """
         Deploy the K3s cluster using OpenTofu.
         """
-        self.variables["k3s_role"] = "master"
+        config["k3s_role"] = "master"
         self.substitute_values(config, "k3s_master")
-        print("output directory is {self.output_dir}")
+        
         print("Initializing OpenTofu...")
         subprocess.run(["tofu", "init"], check=True, cwd=self.output_dir)
         print("Planning infrastructure with OpenTofu...")
-        subprocess.run(["tofu", "plan", "-var-file=terraform.tfvars", "-target=module.k3s_master"], check=True, cwd=self.output_dir)
+        subprocess.run(["tofu", "plan", "-target=module.k3s_master"], check=True, cwd=self.output_dir)
         print("Applying infrastructure with OpenTofu...")
-        subprocess.run(["tofu", "apply", "-auto-approve", "-var-file=terraform.tfvars", "-target=module.k3s_master"], check=True, cwd=self.output_dir)
-        print("Fetching cluster name and master node IP...")
-    
-        # Get cluster name
-        cluster_name_result = subprocess.run(["tofu", "output", "-raw", "cluster_name"], capture_output=True, text=True, cwd=self.output_dir)
-        cluster_name = cluster_name_result.stdout.strip() if cluster_name_result.returncode == 0 else None
-    
-        # Get master node IP
-        master_ip_result = subprocess.run(["tofu", "output", "-raw", "master_ip"], capture_output=True, text=True, cwd=self.output_dir)
-        master_ip = master_ip_result.stdout.strip() if master_ip_result.returncode == 0 else None
+        subprocess.run(["tofu", "apply", "-auto-approve", "-target=module.k3s_master"], check=True, cwd=self.output_dir)
+       
 
-        if cluster_name and master_ip:
-            print(f"Cluster Name: {cluster_name}")
-            print(f"Master Node IP: {master_ip}")
-
-            tfvars_path = f"{self.output_dir}/terraform.tfvars"
-
-            # Read the existing terraform.tfvars content
-            try:
-                with open(tfvars_path, "r") as f:
-                    lines = f.readlines()
-            except FileNotFoundError:
-                lines = []
-
-            # Update or add the variables
-            def update_or_append(key, value):
-                found = False
-                for i, line in enumerate(lines):
-                    if re.match(rf'^\s*{key}\s*=', line):
-                        lines[i] = f'{key} = "{value}"\n'
-                        found = True
-                        break
-                if not found:
-                    lines.append(f'\n{key} = "{value}"\n')
-
-            update_or_append("cluster_name", cluster_name)
-            update_or_append("master_ip", master_ip)
-
-            # Write back the modified file
-            with open(tfvars_path, "w") as f:
-                f.writelines(lines)
-
-            print("Cluster name and master IP saved successfully in terraform.tfvars.")
-        else:
-            print("Failed to fetch cluster name or master IP. Check OpenTofu outputs.")
-
-
-    def deploy_k3s_ha(self):
+    def deploy_k3s_ha(self, config):
         """
         Deploy the K3s cluster using OpenTofu.
         """
-        self.variables["k3s_role"] = "ha"
-        self.substitute_values("k3s_ha")
+        config["k3s_role"] = "ha"
+        self.substitute_values(config, "k3s_ha")
 
         print("Initializing OpenTofu...")
         subprocess.run(["tofu", "init"], check=True, cwd=self.output_dir)
         print("Planning infrastructure with OpenTofu...")
-        subprocess.run(["tofu", "plan", "-var-file=terraform.tfvars", "-target=module.k3s_ha"], check=True, cwd=self.output_dir)
+        subprocess.run(["tofu", "plan", "-target=module.k3s_ha"], check=True, cwd=self.output_dir)
         print("Applying infrastructure with OpenTofu...")
-        subprocess.run(["tofu", "apply", "-auto-approve", "-var-file=terraform.tfvars", "-target=module.k3s_ha"], check=True, cwd=self.output_dir)
+        subprocess.run(["tofu", "apply", "-auto-approve", "-target=module.k3s_ha"], check=True, cwd=self.output_dir)
 
 #
 
-    def deploy_k3s_worker(self):
+    def deploy_k3s_worker(self, config):
         """
         Deploy the K3s cluster using OpenTofu.
         """
-        self.variables["k3s_role"] = "worker"
-        self.substitute_values("k3s_worker")
+        config["k3s_role"] = "worker"
+        self.substitute_values(config, "k3s_worker")
 
         print("Initializing OpenTofu...")
         subprocess.run(["tofu", "init"], check=True, cwd=self.output_dir)
         print("Planning infrastructure with OpenTofu...")
-        subprocess.run(["tofu", "plan", "-var-file=terraform.tfvars", "-target=module.k3s_worker_one"], check=True, cwd=self.output_dir)
+        subprocess.run(["tofu", "plan", "-target=module.k3s_worker_one"], check=True, cwd=self.output_dir)
         print("Applying infrastructure with OpenTofu...")
-        subprocess.run(["tofu", "apply", "-auto-approve", "-var-file=terraform.tfvars", "-target=module.k3s_worker_one"], check=True, cwd=self.output_dir)
+        subprocess.run(["tofu", "apply", "-auto-approve", "-target=module.k3s_worker_one"], check=True, cwd=self.output_dir)
 
     def configure(self):
         """
@@ -171,7 +161,7 @@ class Swarmchestrate:
         except subprocess.CalledProcessError as e:
             print(f"Error during destruction: {e}")
 
-swarmchestrate = Swarmchestrate(template_dir="templates", output_dir="output", tfvars_file="terraform.tfvars", cloud="aws")
+swarmchestrate = Swarmchestrate(template_dir="templates", output_dir="output", tfvars_file="terraform.tfvars")
 
 config = {
     "aws_region": "eu-west-2",   # London region
@@ -179,8 +169,9 @@ config = {
     "ssh_key_name": "g",           # AWS key pair name  
     "k3s_token": "test",
     "ami": "ami-0c0493bbac867d427",
-    "aws_ha_server_count": 2,
-    "aws_worker_count": 2,
+    "aws_ha_server_count": 0,
+    "aws_worker_count": 0,
+    "cloud": "aws"
 }
 
 swarmchestrate.create(config)
