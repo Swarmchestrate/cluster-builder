@@ -1,45 +1,4 @@
 # AWS Variables
-variable "aws_region" {
-  description = "The AWS region to deploy resources in"
-  type        = string
-  default     = "eu-west-2" # Default region is London
-}
-
-variable "ami" {
-  description = "The type of EC2 instance"
-  type        = string
-  default     = "ami-0c0493bbac867d427"
-}
-
-variable "k3s_token" {
-  description = "The type of EC2 instance"
-  type        = string
-  default     = "test"
-}
-
-variable "instance_type" {
-  description = "The type of EC2 instance"
-  type        = string
-  default     = "t2.micro"
-}
-
-variable "ssh_key_name" {
-  description = "The name of the SSH key pair to use for EC2"
-  type        = string
-}
-
-variable "aws_ha_server_count" {
-  description = "Number of EC2 instances to create"
-  type        = number
-  default     = 1
-}
-
-variable "aws_worker_count" {
-  description = "Number of EC2 instances to create"
-  type        = number
-  default     = 1
-}
-
 variable "master_ip" {
   description = "Number of EC2 instances to create"
   type        = string
@@ -50,25 +9,31 @@ variable "cluster_name" {
   type        = string
 }
 
+variable "security_group_id" {
+  description = "The created security group"
+  type        = string
+}
+
+
+provider "aws" {
+  region = "{{ aws_region }}"
+}
+
+{% if k3s_role == "master" %}
 resource "random_string" "cluster_name" {
   length  = 6
   special = false
   upper   = false
 }
 
-provider "aws" {
-  region = var.aws_region
-}
-
 locals {
   cluster_name = "swarmchestrate-${random_string.cluster_name.result}"
 }
-{% if k3s_role == "master" %}
 # Master node
 resource "aws_instance" "k3s_master" {
-  ami           = var.ami  
-  instance_type = var.instance_type
-  key_name      = var.ssh_key_name
+  ami           = "{{ ami }}"
+  instance_type = "{{ instance_type }}"
+  key_name      = "{{ ssh_key_name }}"
 
   vpc_security_group_ids = [aws_security_group.k3s_security_group.id]
 
@@ -81,6 +46,12 @@ resource "aws_instance" "k3s_master" {
     ClusterName = local.cluster_name
   }
 }
+
+output "security_group_id" {
+  description = "The security group ID"
+  value       = aws_security_group.k3s_security_group.id
+}
+
 output "cluster_name" {
   description = "The unique cluster name"
   value       = local.cluster_name
@@ -95,21 +66,21 @@ output "master_ip" {
 {% if k3s_role == "ha" %}
 # HA nodes
 resource "aws_instance" "k3s_ha_servers" {
-  count         = var.aws_ha_server_count
-  ami           = var.ami 
-  instance_type = var.instance_type
-  key_name      = var.ssh_key_name
+  count         = {{ aws_ha_server_count }}
+  ami           = "{{ ami }}"
+  instance_type = "{{ instance_type }}"
+  key_name      = "{{ ssh_key_name }}"
 
-  vpc_security_group_ids = [aws_security_group.k3s_security_group.id]
+  vpc_security_group_ids = [var.security_group_id]
 
   user_data = templatefile("user_data.sh.tpl", {
-    k3s_token = var.k3s_token,
+    k3s_token = "{{ k3s_token }}",
     master_ip = var.master_ip
   })
 
   tags = {
-    Name = "K3s-HA-Server-${local.cluster_name}-${count.index + 1}"
-    ClusterName = local.cluster_name
+    Name = "K3s-HA-Server-${var.cluster_name}-${count.index + 1}"
+    ClusterName = var.cluster_name
   }
 }
 {% endif %}
@@ -117,22 +88,22 @@ resource "aws_instance" "k3s_ha_servers" {
 {% if k3s_role == "worker" %}
 # Worker nodes (agents)
 resource "aws_instance" "k3s_workers" {
-  count         = var.aws_worker_count
-  ami           = var.ami
-  instance_type = var.instance_type
-  key_name      = var.ssh_key_name
+  count         = "{{ aws_worker_count }}"
+  ami           = "{{ ami }}"
+  instance_type = "{{ instance_type }}"
+  key_name      = "{{ ssh_key_name }}"
 
 
-  vpc_security_group_ids = [aws_security_group.k3s_security_group.id]
+  vpc_security_group_ids = [var.security_group_id]
   
   user_data = templatefile("user_data.sh.tpl", {
-    k3s_token = var.k3s_token,
+    k3s_token = "{{ k3s_token }}",
     master_ip = var.master_ip
   })
 
   tags = {
-    Name = "K3s-Worker-Node--${local.cluster_name}-${count.index + 1}"
-    ClusterName = local.cluster_name
+    Name = "K3s-Worker-Node--${var.cluster_name}-${count.index + 1}"
+    ClusterName = var.cluster_name
   }
 }
 {% endif %}
