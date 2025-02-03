@@ -6,12 +6,12 @@ import hcl2
 import re
 
 class Swarmchestrate:
-    def __init__(self, template_dir, output_dir,tfvars_file=None, variables=None):
+    def __init__(self, template_dir, output_dir,tfvars_file=None, variables=None, cloud="aws"):
         """
         Initialize the K3sCluster class.
 
         """
-        self.template_dir = template_dir
+        self.template_dir = f"{template_dir}/{cloud}"
         self.output_dir = output_dir
         if tfvars_file:
             self.variables = self.load_variables_from_tfvars(tfvars_file)
@@ -39,12 +39,13 @@ class Swarmchestrate:
 
         # self.configure()
 
-    def substitute_values(self):
+    def substitute_values(self, subdir=None):
         """
         Substitute values into Jinja2 templates and save the rendered files.
         """
-        if not os.path.exists(self.output_dir):
-            os.makedirs(self.output_dir)
+        out_dir = f"{self.output_dir}/{subdir if subdir else ''}"
+        if not os.path.exists(out_dir):
+            os.makedirs(out_dir)
 
         env = jinja2.Environment(loader=jinja2.FileSystemLoader(self.template_dir))
         
@@ -52,26 +53,28 @@ class Swarmchestrate:
             if template_name.endswith('.j2'):
                 template = env.get_template(template_name)
                 rendered_content = template.render(self.variables)
-                output_path = os.path.join(self.output_dir, template_name[:-3])  
+                output_path = os.path.join(out_dir, "template_name[:-3]")  
 
                 with open(output_path, 'w') as f:
                     f.write(rendered_content)
                 print(f"Rendered template saved to: {output_path}")
+        
+        #copy main.tf to output directory
+        subprocess.run(["cp", f"{self.template_dir}/main.tf", self.output_dir], check=True)
 
     def deploy_k3s_master(self):
         """
         Deploy the K3s cluster using OpenTofu.
         """
         self.variables["k3s_role"] = "master"
-        self.substitute_values()
-
+        self.substitute_values("k3s_master")
 
         print("Initializing OpenTofu...")
         subprocess.run(["tofu", "init"], check=True, cwd=self.output_dir)
         print("Planning infrastructure with OpenTofu...")
-        subprocess.run(["tofu", "plan", "-var-file=../terraform.tfvars"], check=True, cwd=self.output_dir)
+        subprocess.run(["tofu", "plan", "-var-file=../terraform.tfvars", "-target=k3_master"], check=True, cwd=self.output_dir)
         print("Applying infrastructure with OpenTofu...")
-        subprocess.run(["tofu", "apply", "-auto-approve", "-var-file=../terraform.tfvars"], check=True, cwd=self.output_dir)
+        subprocess.run(["tofu", "apply", "-auto-approve", "-var-file=../terraform.tfvars", "-target=k3_master"], check=True, cwd=self.output_dir)
         print("Fetching cluster name and master node IP...")
     
         # Get cluster name
@@ -123,7 +126,7 @@ class Swarmchestrate:
         Deploy the K3s cluster using OpenTofu.
         """
         self.variables["k3s_role"] = "ha"
-        self.substitute_values()
+        self.substitute_values("k3s_ha")
 
         print("Initializing OpenTofu...")
         subprocess.run(["tofu", "init"], check=True, cwd=self.output_dir)
@@ -139,7 +142,7 @@ class Swarmchestrate:
         Deploy the K3s cluster using OpenTofu.
         """
         self.variables["k3s_role"] = "worker"
-        self.substitute_values()
+        self.substitute_values("k3s_worker")
 
         print("Initializing OpenTofu...")
         subprocess.run(["tofu", "init"], check=True, cwd=self.output_dir)
@@ -168,7 +171,7 @@ class Swarmchestrate:
         except subprocess.CalledProcessError as e:
             print(f"Error during destruction: {e}")
 
-swarmchestrate = Swarmchestrate(template_dir="templates", output_dir="output", tfvars_file="terraform.tfvars")
+swarmchestrate = Swarmchestrate(template_dir="templates", output_dir="output", tfvars_file="terraform.tfvars", cloud="aws")
 swarmchestrate.create()
 
 # delay_seconds = 5 * 60
