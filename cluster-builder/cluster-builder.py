@@ -45,14 +45,14 @@ module "k3s_ha" {
 }
 """
 
-        if config.get("aws_worker_count", 0) > 0:
-            main_tf_content += """
-module "k3s_worker" {
-  source = "./k3s_worker"
+        for i in range(config.get("aws_worker_count", 0)):
+            main_tf_content += f"""
+module "k3s_worker_{i}" {{
+  source = "./k3s_worker_{i}"
   master_ip         = module.k3s_master.master_ip
   cluster_name      = module.k3s_master.cluster_name
   security_group_id = module.k3s_master.security_group_id
-}
+}}
 """
 
         # Only write main.tf if at least one module is included
@@ -171,7 +171,9 @@ config = {
     "ami": "ami-0c0493bbac867d427",
     "aws_ha_server_count": 0,
     "aws_worker_count": 0,
-    "cloud": "aws"
+    "cloud": "aws",
+    "aws_access_key": "YOUR_AWS_ACCESS_KEY",
+    "aws_secret_key": "YOUR_AWS_SECRET_KEY"
 }
 
 swarmchestrate.create(config)
