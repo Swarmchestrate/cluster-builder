@@ -1,5 +1,8 @@
 provider "openstack" {
-  cloud = "{{ cloud }}"
+  auth_url                     = "{{ auth_url }}"
+  application_credential_id     = "{{ application_credential_id }}"
+  application_credential_secret = "{{ application_credential_secret }}"
+  region                       = "{{ region }}"
 }
 
 # Define cluster name from Python
@@ -19,18 +22,32 @@ data "openstack_networking_secgroup_v2" "k3s_security_group" {
 
 {% if k3s_role == "master" %}
 # Master node
+resource "openstack_blockstorage_volume_v3" "root_volume" {
+  name        = "K3s-Master-Node-volume-${local.cluster_name}"
+  size        = "{{ size }}"
+  volume_type = "{{ volume_type }}" 
+  image_id    = "{{ image_id }}"
+}
+
 resource "openstack_compute_instance_v2" "k3s_master" {
   name            = "K3s-Master-Node-${local.cluster_name}"
-  image_id        = "{{ image_id }}"
   flavor_id       = "{{ flavor_id }}"
   key_pair        = "{{ ssh_key_name }}"
   security_groups = [data.openstack_networking_secgroup_v2.k3s_security_group.name]
+
+  block_device {
+    uuid                  = openstack_blockstorage_volume_v3.root_volume.id
+    source_type           = "volume"
+    destination_type      = "volume"
+    boot_index            = 0
+    delete_on_termination = true
+  }
 
   network {
     uuid = data.openstack_networking_network_v2.cluster_network.id
   }
 
-  user_data = templatefile("../../templates/userdata.sh.tpl.j2", {
+  user_data = templatefile("master_user_data.sh.tpl", {
     k3s_token = "{{ k3s_token }}"
   })
 }
@@ -68,19 +85,33 @@ variable "security_group_name" {
 }
 
 # HA nodes
+resource "openstack_blockstorage_volume_v3" "root_volume" {
+  name        = "K3s-HA-Node-volume-${local.cluster_name}-${count.index + 1}"
+  size        = "{{ size }}"
+  volume_type = "{{ volume_type }}"  
+  image_id    = "{{ image_id }}"
+}
+
 resource "openstack_compute_instance_v2" "k3s_ha" {
   count           = {{ openstack_ha_server_count }}
   name            = "K3s-HA-Server-${var.cluster_name}-${count.index + 1}"
-  image_id        = "{{ image_id }}"
   flavor_id       = "{{ flavor_id }}"
   key_pair        = "{{ ssh_key_name }}"
   security_groups = [var.security_group_name]
+
+  block_device {
+    uuid                  = openstack_blockstorage_volume_v3.root_volume.id
+    source_type           = "volume"
+    destination_type      = "volume"
+    boot_index            = 0
+    delete_on_termination = true
+  }
 
   network {
     uuid = data.openstack_networking_network_v2.cluster_network.id
   }
 
-  user_data = templatefile("../../templates/userdata.sh.tpl.j2", {
+  user_data = templatefile("ha_user_data.sh.tpl", {
     k3s_token = "{{ k3s_token }}",
     master_ip = var.master_ip
   })
@@ -104,6 +135,13 @@ variable "security_group_name" {
 }
 
 # Worker nodes
+resource "openstack_blockstorage_volume_v3" "root_volume" {
+  name        = "K3s-Worker-Node-volume-${local.cluster_name}-${count.index + 1}"
+  size        = "{{ size }}"
+  volume_type = "{{ volume_type }}" 
+  image_id    = "{{ image_id }}"
+}
+
 resource "openstack_compute_instance_v2" "k3s_worker" {
   count           = {{ openstack_worker_count }}
   name            = "K3s-Worker-Node-${var.cluster_name}-${count.index + 1}"
@@ -112,11 +150,19 @@ resource "openstack_compute_instance_v2" "k3s_worker" {
   key_pair        = "{{ ssh_key_name }}"
   security_groups = [var.security_group_name]
 
+  block_device {
+    uuid                  = openstack_blockstorage_volume_v3.root_volume.id
+    source_type           = "volume"
+    destination_type      = "volume"
+    boot_index            = 0
+    delete_on_termination = true
+  }
+
   network {
     uuid = data.openstack_networking_network_v2.cluster_network.id
   }
 
-  user_data = templatefile("../../templates/userdata.sh.tpl.j2", {
+  user_data = templatefile("worker_user_data.sh.tpl", {
     k3s_token = "{{ k3s_token }}",
     master_ip = var.master_ip
   })
