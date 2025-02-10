@@ -1,129 +1,154 @@
-# import time
 import jinja2
 import os
 import subprocess
+import random
+import string
+from config import aws_config, openstack_config
 
 class Swarmchestrate:
-    def __init__(self, template_dir, output_dir,tfvars_file=None, variables=None):
+    def __init__(self, template_dir, output_dir, variables=None):
         """
-        Initialize the K3sCluster class.
+        Initialize the Swarmchestrate class.
 
         """
         self.template_dir = f"{template_dir}"
         self.output_dir = output_dir
-        
 
-    def create(self, config):
+    def get_cluster_output_dir(self, cluster_name):
+        return os.path.join(self.output_dir, f"cluster-{cluster_name}")
+    
+    def generate_cluster_name(self):
         """
-        Create a new K3s cluster with OpenTofu.
+        Generate a random cluster name.
         """
-        print("Creating K3s cluster...")
-
-        self.deploy_k3s_master(config)
-
-        # self.deploy_k3s_ha(config)
-        # self.deploy_k3s_worker()
-
-
+        random_str = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
+        return f"swarmchestrate-{random_str}"
+    
     def generate_main_tf(self, config):
         """
         Dynamically generate main.tf based on the configuration.
         """
-        main_tf_content = """
-module "k3s_master" {
-  source = "./k3s_master"
-}
+        cloud = config.get("cloud")
+        cluster_name = config["cluster_name"]
+        cluster_dir = self.get_cluster_output_dir(cluster_name)
+
+        os.makedirs(cluster_dir, exist_ok=True)
+
+        main_tf_content = f"""
+module "k3s_master" {{
+  source = "./k3s_master_{cloud}"
+}}
 """
 
-        if config.get("aws_ha_server_count", 0) > 0:
-            main_tf_content += """
-module "k3s_ha" {
-  source = "./k3s_ha"
-  master_ip         = module.k3s_master.master_ip
-  cluster_name      = module.k3s_master.cluster_name
-  security_group_id = module.k3s_master.security_group_id
-}
-"""
-
-        for i in range(config.get("aws_worker_count", 0)):
+        if config.get(f"{cloud}_ha_server_count", 0) > 0:
             main_tf_content += f"""
-module "k3s_worker_{i}" {{
-  source = "./k3s_worker_{i}"
+module "k3s_ha_{cloud}" {{
+  source = "./k3s_ha_{cloud}"
   master_ip         = module.k3s_master.master_ip
   cluster_name      = module.k3s_master.cluster_name
   security_group_id = module.k3s_master.security_group_id
 }}
 """
 
-        # Only write main.tf if at least one module is included
-        if main_tf_content.strip():
-            with open(os.path.join(self.output_dir, "main.tf"), "w") as f:
-                f.write(main_tf_content.strip())
+        for i in range(config.get(f"{cloud}_worker_count", 0)):
+            main_tf_content += f"""
+module "k3s_worker_{cloud}_{i}" {{
+  source = "./k3s_worker_{cloud}_{i}"
+  master_ip         = module.k3s_master.master_ip
+  cluster_name      = module.k3s_master.cluster_name
+  security_group_id = module.k3s_master.security_group_id
+}}
+"""
+        with open(os.path.join(cluster_dir, "main.tf"), "w") as f:
+            f.write(main_tf_content.strip())
 
-            print("Generated main.tf dynamically.")
+        print(f"Generated main.tf for {cloud} in {cluster_dir}.")
 
 
     def substitute_values(self, config, subdir=None):
         """
         Substitute values into Jinja2 templates and save the rendered files.
+        This method will render main.tf, network_security_group, and other templates into their respective folders.
         """
-        out_dir = f"{self.output_dir}/{subdir if subdir else ''}"
-        if not os.path.exists(out_dir):
-            os.makedirs(out_dir)
+        cloud = config["cloud"]
+        cluster_name = config["cluster_name"]  # Always use the existing cluster name
+        cluster_dir = self.get_cluster_output_dir(cluster_name)
+        os.makedirs(cluster_dir, exist_ok=True)  # Create the cluster folder if not already present
 
-        cloud_template_dir = f"{self.template_dir}/{config['cloud']}"
-        env = jinja2.Environment(loader=jinja2.FileSystemLoader(cloud_template_dir))
-        
+        cloud_template_dir = os.path.join(self.template_dir, cloud)
+        env = jinja2.Environment(loader=jinja2.FileSystemLoader(self.template_dir))
+
+        # # Determine roles
+        # roles = ['master', 'ha', 'worker']
+        # if subdir:
+        #     role_subdirs = [subdir]  # Only use provided subdir
+        # else:
+        #     role_subdirs = roles  # Create subdirectories for each role (master, ha, worker)
+
+        # Render templates for each subdir (role or explicit subdir)
+        #for role_subdir in role_subdirs:
+        role_dir = os.path.join(cluster_dir, subdir)
+        os.makedirs(role_dir, exist_ok=True)
+
         for template_name in os.listdir(cloud_template_dir):
-            if subdir and "master" not in subdir and "network_security" in template_name:
-                continue
             if template_name.endswith('.j2'):
-                template = env.get_template(template_name)
+                template = env.get_template(f"{cloud}/{template_name}")
                 rendered_content = template.render(config)
-                output_path = os.path.join(out_dir, template_name[:-3])  
+                output_path = os.path.join(role_dir, template_name[:-3])  # Removing '.j2'
 
                 with open(output_path, 'w') as f:
                     f.write(rendered_content)
-                print(f"Rendered template saved to: {output_path}")
+                print(f"{cloud.upper()}: Rendered {template_name} for {config['k3s_role'] } saved to: {output_path}")
         
-        self.generate_main_tf(config)
-        #copy main.tf to output directory
-        # main_tf_path = f"{self.template_dir}/main.tf"
-        # if os.path.exists(main_tf_path):
-        #     subprocess.run(["cp", main_tf_path, self.output_dir], check=True)
-        #     print(f"Copied main.tf to {self.output_dir}")
-        # else:
-        #     print(f"Warning: main.tf not found in {self.template_dir}. Skipping copy.")
+        template = env.get_template("user_data.sh.tpl.j2")
+        rendered_content = template.render(config)
+        output_path = os.path.join(cluster_dir, f"{config['k3s_role']}_user_data.sh.tpl" ) # Removing '.j2'
 
+        with open(output_path, 'w') as f:
+            f.write(rendered_content)
+        print(f"{cloud.upper()}: Rendered user_data.sh.tpl for {config['k3s_role'] } saved to: {output_path}")
+
+        self.generate_main_tf(config)
 
     def deploy_k3s_master(self, config):
         """
         Deploy the K3s cluster using OpenTofu.
         """
-        config["k3s_role"] = "master"
-        self.substitute_values(config, "k3s_master")
+        cloud = config["cloud"]
+
+        # Generate a cluster name if not provided
+        if "cluster_name" not in config:
+            cluster_name = self.generate_cluster_name()
         
-        print("Initializing OpenTofu...")
-        subprocess.run(["tofu", "init"], check=True, cwd=self.output_dir)
-        print("Planning infrastructure with OpenTofu...")
-        subprocess.run(["tofu", "plan", "-target=module.k3s_master"], check=True, cwd=self.output_dir)
-        print("Applying infrastructure with OpenTofu...")
-        subprocess.run(["tofu", "apply", "-auto-approve", "-target=module.k3s_master"], check=True, cwd=self.output_dir)
-       
+        config["cluster_name"] = cluster_name
+
+        cluster_dir = self.get_cluster_output_dir(cluster_name)
+        config["k3s_role"] = "master"
+        self.substitute_values(config, f"k3s_master_{cloud}")
+
+        print(f"Initializing OpenTofu for {cloud} master in {cluster_dir}...")
+        subprocess.run(["tofu", "init"], check=True, cwd=cluster_dir)
+        print(f"Planning infrastructure for {cloud} master...")
+        subprocess.run(["tofu", "plan", "-target=module.k3s_master"], check=True, cwd=cluster_dir)
+        print(f"Applying infrastructure for {cloud} master...")
+        subprocess.run(["tofu", "apply", "-auto-approve", "-target=module.k3s_master"], check=True, cwd=cluster_dir)
 
     def deploy_k3s_ha(self, config):
         """
         Deploy the K3s cluster using OpenTofu.
         """
+        cloud = config["cloud"]
+        cluster_name = config["cluster_name"]
+        cluster_dir = self.get_cluster_output_dir(cluster_name)
         config["k3s_role"] = "ha"
-        self.substitute_values(config, "k3s_ha")
+        self.substitute_values(config, f"k3s_ha_{cloud}")
 
-        print("Initializing OpenTofu...")
-        subprocess.run(["tofu", "init"], check=True, cwd=self.output_dir)
-        print("Planning infrastructure with OpenTofu...")
-        subprocess.run(["tofu", "plan", "-target=module.k3s_ha"], check=True, cwd=self.output_dir)
-        print("Applying infrastructure with OpenTofu...")
-        subprocess.run(["tofu", "apply", "-auto-approve", "-target=module.k3s_ha"], check=True, cwd=self.output_dir)
+        print(f"Initializing OpenTofu for {cloud} HA in {cluster_dir}...")
+        subprocess.run(["tofu", "init"], check=True, cwd=cluster_dir)
+        print(f"Planning infrastructure for {cloud} HA...")
+        subprocess.run(["tofu", "plan", "-target=module.k3s_ha"], check=True, cwd=cluster_dir)
+        print(f"Applying infrastructure for {cloud} HA...")
+        subprocess.run(["tofu", "apply", "-auto-approve", "-target=module.k3s_ha"], check=True, cwd=cluster_dir)
 
 #
 
@@ -131,52 +156,59 @@ module "k3s_worker_{i}" {{
         """
         Deploy the K3s cluster using OpenTofu.
         """
+        cloud = config["cloud"]
+        cluster_name = config["cluster_name"]
+        cluster_dir = self.get_cluster_output_dir(cluster_name)
         config["k3s_role"] = "worker"
-        self.substitute_values(config, "k3s_worker")
 
-        print("Initializing OpenTofu...")
-        subprocess.run(["tofu", "init"], check=True, cwd=self.output_dir)
-        print("Planning infrastructure with OpenTofu...")
-        subprocess.run(["tofu", "plan", "-target=module.k3s_worker_one"], check=True, cwd=self.output_dir)
-        print("Applying infrastructure with OpenTofu...")
-        subprocess.run(["tofu", "apply", "-auto-approve", "-target=module.k3s_worker_one"], check=True, cwd=self.output_dir)
+        worker_count = config.get(f"{cloud}_worker_count", 0)
 
-    def configure(self):
-        """
-        Configure the deployed K3s cluster ( for now it is covered in deploy step).
-        """
-        raise NotImplementedError
+        for i in range(worker_count):
+            subdir = f"k3s_worker_{cloud}_{i}"
+            self.substitute_values(config, subdir)
 
-    def destroy(self):
+            print(f"Initializing OpenTofu for {cloud} worker {i} in {cluster_dir}...")
+            subprocess.run(["tofu", "init"], check=True, cwd=cluster_dir)
+            print(f"Planning infrastructure for {cloud} worker {i}...")
+            subprocess.run(["tofu", "plan", f"-target=module.k3s_worker_{cloud}_{i}"], check=True, cwd=cluster_dir)
+            print(f"Applying infrastructure for {cloud} worker {i}...")
+            subprocess.run(["tofu", "apply", "-auto-approve", f"-target=module.k3s_worker_{cloud}_{i}"], check=True, cwd=cluster_dir)
+
+    def destroy(self, cluster_name):
         """
-        Destroy the deployed K3s cluster using OpenTofu.
+        Destroy the deployed K3s cluster for the specified cluster_name using OpenTofu.
         """
-        print("Destroying the K3s cluster...")
+        print(f"Destroying the K3s cluster '{cluster_name}'...")
+
+        # Get the directory for the specified cluster
+        cluster_dir = self.get_cluster_output_dir(cluster_name)
+
+        if not os.path.exists(cluster_dir):
+            print(f"Error: Cluster directory '{cluster_dir}' not found.")
+            return
+
         try:
-            print("Planning destruction with OpenTofu...")
-            subprocess.run(["tofu", "plan", "-destroy"], check=True, cwd=self.output_dir)
-            print("Destroying infrastructure with OpenTofu...")
-            subprocess.run(["tofu", "destroy", "-auto-approve"], check=True, cwd=self.output_dir)
-            print("K3s cluster destroyed successfully.")
+            print(f"Planning destruction for cluster '{cluster_name}'...")
+            subprocess.run(["tofu", "plan", "-destroy"], check=True, cwd=cluster_dir)
+
+            print(f"Destroying infrastructure for cluster '{cluster_name}'...")
+            subprocess.run(["tofu", "destroy", "-auto-approve"], check=True, cwd=cluster_dir)
+
+            print(f"Cluster '{cluster_name}' destroyed successfully.")
+    
         except subprocess.CalledProcessError as e:
-            print(f"Error during destruction: {e}")
+            print(f"Error during destruction of cluster '{cluster_name}': {e}")
 
-swarmchestrate = Swarmchestrate(template_dir="templates", output_dir="output", tfvars_file="terraform.tfvars")
+        except Exception as e:
+            print(f"An unexpected error occurred during destruction of cluster '{cluster_name}': {e}")
+   
+swarmchestrate = Swarmchestrate(template_dir="templates", output_dir="output")
 
-config = {
-    "aws_region": "eu-west-2",   # London region
-    "instance_type": "t2.micro",
-    "ssh_key_name": "g",           # AWS key pair name  
-    "k3s_token": "test",
-    "ami": "ami-0c0493bbac867d427",
-    "aws_ha_server_count": 0,
-    "aws_worker_count": 0,
-    "cloud": "aws",
-    "aws_access_key": "YOUR_AWS_ACCESS_KEY",
-    "aws_secret_key": "YOUR_AWS_SECRET_KEY"
-}
 
-swarmchestrate.create(config)
+swarmchestrate.deploy_k3s_master(aws_config)
+#swarmchestrate.deploy_k3s_ha(aws_config)
+#swarmchestrate.deploy_k3s_master(aws_config)
+#swarmchestrate.deploy_k3s_worker(openstack_config)
 
 # delay_seconds = 5 * 60
 # print(f"Waiting for {delay_seconds / 60} minutes before destroying resources...")
