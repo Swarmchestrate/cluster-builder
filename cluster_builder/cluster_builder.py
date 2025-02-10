@@ -125,13 +125,9 @@ module "k3s_worker_{cloud}_{i}" {{
         cluster_dir = self.get_cluster_output_dir(cluster_name)
         config["k3s_role"] = "master"
         self.substitute_values(config, f"k3s_master_{cloud}")
+        target = "module.k3s_master"
+        self.deploy(config, target, cluster_dir)
 
-        print(f"Initializing OpenTofu for {cloud} master in {cluster_dir}...")
-        subprocess.run(["tofu", "init"], check=True, cwd=cluster_dir)
-        print(f"Planning infrastructure for {cloud} master...")
-        subprocess.run(["tofu", "plan", "-target=module.k3s_master"], check=True, cwd=cluster_dir)
-        print(f"Applying infrastructure for {cloud} master...")
-        subprocess.run(["tofu", "apply", "-auto-approve", "-target=module.k3s_master"], check=True, cwd=cluster_dir)
 
     def deploy_k3s_ha(self, config):
         """
@@ -142,15 +138,9 @@ module "k3s_worker_{cloud}_{i}" {{
         cluster_dir = self.get_cluster_output_dir(cluster_name)
         config["k3s_role"] = "ha"
         self.substitute_values(config, f"k3s_ha_{cloud}")
+        target = "module.k3s_ha"
+        self.deploy(config, target, cluster_dir)
 
-        print(f"Initializing OpenTofu for {cloud} HA in {cluster_dir}...")
-        subprocess.run(["tofu", "init"], check=True, cwd=cluster_dir)
-        print(f"Planning infrastructure for {cloud} HA...")
-        subprocess.run(["tofu", "plan", "-target=module.k3s_ha"], check=True, cwd=cluster_dir)
-        print(f"Applying infrastructure for {cloud} HA...")
-        subprocess.run(["tofu", "apply", "-auto-approve", "-target=module.k3s_ha"], check=True, cwd=cluster_dir)
-
-#
 
     def deploy_k3s_worker(self, config):
         """
@@ -166,13 +156,20 @@ module "k3s_worker_{cloud}_{i}" {{
         for i in range(worker_count):
             subdir = f"k3s_worker_{cloud}_{i}"
             self.substitute_values(config, subdir)
+            target = f"module.k3s_worker_{cloud}_{i}"
+            self.deploy(config, target, cluster_dir)
 
-            print(f"Initializing OpenTofu for {cloud} worker {i} in {cluster_dir}...")
-            subprocess.run(["tofu", "init"], check=True, cwd=cluster_dir)
-            print(f"Planning infrastructure for {cloud} worker {i}...")
-            subprocess.run(["tofu", "plan", f"-target=module.k3s_worker_{cloud}_{i}"], check=True, cwd=cluster_dir)
-            print(f"Applying infrastructure for {cloud} worker {i}...")
-            subprocess.run(["tofu", "apply", "-auto-approve", f"-target=module.k3s_worker_{cloud}_{i}"], check=True, cwd=cluster_dir)
+
+    def deploy(self, config, target, cluster_dir, dryrun=False):
+        """
+        Execute the OpenTofu commands to deploy the K3s component.
+        """
+        print(f"Initializing OpenTofu for {config['cloud']} {config['k3s_role']} in {cluster_dir}...")
+        subprocess.run(["tofu", "init"], check=True, cwd=cluster_dir)
+        print(f"Planning infrastructure for {config['cloud']} {config['k3s_role']}...")
+        subprocess.run(["tofu", "plan", f"-target={target}"], check=True, cwd=cluster_dir)
+        print(f"Applying infrastructure for {config['cloud']} {config['k3s_role']}...")
+        subprocess.run(["tofu", "apply", "-auto-approve", f"-target={target}"], check=True, cwd=cluster_dir)
 
     def destroy(self, cluster_name):
         """
