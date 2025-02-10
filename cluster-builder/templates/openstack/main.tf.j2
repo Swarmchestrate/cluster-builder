@@ -1,0 +1,124 @@
+provider "openstack" {
+  cloud = "{{ cloud }}"
+}
+
+# Define cluster name from Python
+locals {
+  cluster_name = "{{ cluster_name }}"
+}
+
+# Auto-select network based on cluster name
+data "openstack_networking_network_v2" "cluster_network" {
+  name = "network-${local.cluster_name}"  # Ensure your network follows this naming convention
+}
+
+# Auto-select security group based on cluster name
+data "openstack_networking_secgroup_v2" "k3s_security_group" {
+  name = "k3s-security-group-${local.cluster_name}"
+}
+
+{% if k3s_role == "master" %}
+# Master node
+resource "openstack_compute_instance_v2" "k3s_master" {
+  name            = "K3s-Master-Node-${local.cluster_name}"
+  image_id        = "{{ image_id }}"
+  flavor_id       = "{{ flavor_id }}"
+  key_pair        = "{{ ssh_key_name }}"
+  security_groups = [data.openstack_networking_secgroup_v2.k3s_security_group.name]
+
+  network {
+    uuid = data.openstack_networking_network_v2.cluster_network.id
+  }
+
+  user_data = templatefile("../../templates/userdata.sh.tpl.j2", {
+    k3s_token = "{{ k3s_token }}"
+  })
+}
+
+output "cluster_name" {
+  description = "The unique cluster name"
+  value       = local.cluster_name
+}
+
+output "master_ip" {
+  description = "The floating IP of the master node"
+  value       = openstack_compute_instance_v2.k3s_master.access_ip_v4
+}
+
+output "security_group_name" {
+  description = "The security group name"
+  value       = data.openstack_networking_secgroup_v2.k3s_security_group.name
+}
+{% endif %}
+
+{% if k3s_role == "ha" %}
+variable "master_ip" {
+  description = "Master node IP"
+  type        = string
+}
+
+variable "cluster_name" {
+  description = "Cluster name"
+  type        = string
+}
+
+variable "security_group_name" {
+  description = "Security group name"
+  type        = string
+}
+
+# HA nodes
+resource "openstack_compute_instance_v2" "k3s_ha" {
+  count           = {{ openstack_ha_server_count }}
+  name            = "K3s-HA-Server-${var.cluster_name}-${count.index + 1}"
+  image_id        = "{{ image_id }}"
+  flavor_id       = "{{ flavor_id }}"
+  key_pair        = "{{ ssh_key_name }}"
+  security_groups = [var.security_group_name]
+
+  network {
+    uuid = data.openstack_networking_network_v2.cluster_network.id
+  }
+
+  user_data = templatefile("../../templates/userdata.sh.tpl.j2", {
+    k3s_token = "{{ k3s_token }}",
+    master_ip = var.master_ip
+  })
+}
+{% endif %}
+
+{% if k3s_role == "worker" %}
+variable "master_ip" {
+  description = "Master node IP"
+  type        = string
+}
+
+variable "cluster_name" {
+  description = "Cluster name"
+  type        = string
+}
+
+variable "security_group_name" {
+  description = "Security group name"
+  type        = string
+}
+
+# Worker nodes
+resource "openstack_compute_instance_v2" "k3s_worker" {
+  count           = {{ openstack_worker_count }}
+  name            = "K3s-Worker-Node-${var.cluster_name}-${count.index + 1}"
+  image_id        = "{{ image_id }}"
+  flavor_id       = "{{ flavor_id }}"
+  key_pair        = "{{ ssh_key_name }}"
+  security_groups = [var.security_group_name]
+
+  network {
+    uuid = data.openstack_networking_network_v2.cluster_network.id
+  }
+
+  user_data = templatefile("../../templates/userdata.sh.tpl.j2", {
+    k3s_token = "{{ k3s_token }}",
+    master_ip = var.master_ip
+  })
+}
+{% endif %}

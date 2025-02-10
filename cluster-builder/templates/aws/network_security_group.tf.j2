@@ -1,7 +1,7 @@
 # creating new network security group
 
 resource "aws_security_group" "k3s_security_group" {
-  name        = "k3s-security-group-${random_string.cluster_name.result}"
+  name        = "k3s-security-group-${local.cluster_name}"
   description = "Security group for K3s nodes"
 
   # Inbound rules
@@ -92,6 +92,6 @@ resource "aws_security_group" "k3s_security_group" {
   }
 
   tags = {
-    Name = "K3s-Security-Group"
+    Name = "K3s-Security-Group-${local.cluster_name}"
   }
 }
