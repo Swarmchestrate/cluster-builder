@@ -1,0 +1,24 @@
+resource "null_resource" "configure_firewall" {
+  connection {
+    type        = "ssh"
+    user        = "{{ ssh_user }}"
+    private_key = file("{{ ssh_private_key_path }}")
+    host        = local.edge_device_ip
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "sudo ufw allow 22/tcp",      # SSH
+      "sudo ufw allow 6443/tcp",    # K3s API Server
+      "sudo ufw allow 8472/udp",    # Flannel VXLAN
+      "sudo ufw allow 10250/tcp",   # Kubelet metrics
+      "sudo ufw allow 51820/udp",   # Wireguard IPv4
+      "sudo ufw allow 51821/udp",   # Wireguard IPv6
+      "sudo ufw allow 5001/tcp",    # Embedded registry (Spegel)
+      "sudo ufw allow 53/udp",      # DNS for CoreDNS
+      "sudo ufw allow 5432/tcp",    # pg databse port acess
+      "sudo ufw status",            # Check the current status
+      "sudo ufw --force enable"     # Enable firewall
+    ]
+  }
+}

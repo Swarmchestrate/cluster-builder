@@ -1,0 +1,33 @@
+locals {
+  cluster_name   = "{{ cluster_name }}"  # Cluster name (passed from Python)
+  edge_device_ip = "{{ edge_device_ip }}"  # IP of the already provisioned edge device
+  k3s_token      = "{{ k3s_token }}"  # K3s cluster token
+  master_ip      = "{{ master_ip }}"  # K3s master node IP
+  k3s_role       = "{{ k3s_role }}"  # Role of the edge device (master, ha, worker)
+}
+
+# Reference to the firewall configuration (from network_security_group.tf)
+resource "null_resource" "deploy_k3s_edge" {
+  depends_on = [null_resource.configure_firewall]  # Ensure firewall setup runs first
+
+  connection {
+    type        = "ssh"
+    user        = "{{ ssh_user }}"
+    password    = "{{ ssh_password }}"
+    host        = local.edge_device_ip
+  }
+
+  provisioner "file" {
+    source      = "edge_user_data.sh"
+    destination = "/tmp/edge_user_data.sh"
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "chmod +x /tmp/edge_user_data.sh",
+      "sudo K3S_ROLE='${local.k3s_role}' K3S_TOKEN='${local.k3s_token}' MASTER_IP='${local.master_ip}' /tmp/edge_user_data.sh"
+    ]
+  }
+
+  tags = [local.cluster_name]  # Store the cluster name tag for reference
+}
