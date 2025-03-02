@@ -14,7 +14,8 @@ resource "openstack_networking_secgroup_v2" "k3s_security_group" {
     {"port_min": 22, "port_max": 22, "protocol": "tcp", "description": "SSH access"},
     {"port_min": 80, "port_max": 80, "protocol": "tcp", "description": "HTTP access"},
     {"port_min": 443, "port_max": 443, "protocol": "tcp", "description": "HTTPS access"},
-    {"port_min": 53, "port_max": 53, "protocol": "udp", "description": "DNS for CoreDNS"}
+    {"port_min": 53, "port_max": 53, "protocol": "udp", "description": "DNS for CoreDNS"},
+    {"port_min": 5432, "port_max": 5432, "protocol": "tcp", "description": "pg database access"}
 ] %}
 
 {% for rule in ingress_rules %}

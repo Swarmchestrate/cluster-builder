@@ -1,3 +1,15 @@
+# PostgreSQL Backend Configuration for OpenTofu
+terraform {
+  backend "postgresql" {
+    host     = "{{ pg_host }}"
+    database = "{{ pg_database }}"
+    user     = "{{ pg_user }}"
+    password = "{{ pg_password }}"
+    schema   = "public"
+    table    = "state"
+  }
+}
+
 provider "openstack" {
   auth_url                     = "{{ auth_url }}"
   application_credential_id     = "{{ application_credential_id }}"

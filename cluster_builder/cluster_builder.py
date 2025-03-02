@@ -3,7 +3,8 @@ import os
 import subprocess
 import random
 import string
-from config import aws_config, openstack_config
+from config import aws_config, openstack_config, edge_config
+from pg_backend import PGBackend
 
 class Swarmchestrate:
     def __init__(self, template_dir, output_dir, variables=None):
@@ -13,6 +14,7 @@ class Swarmchestrate:
         """
         self.template_dir = f"{template_dir}"
         self.output_dir = output_dir
+        self.pg_backend = PGBackend()
 
     def get_cluster_output_dir(self, cluster_name):
         return os.path.join(self.output_dir, f"cluster-{cluster_name}")
@@ -63,6 +65,8 @@ module "k3s_worker_{cloud}_{i}" {{
             f.write(main_tf_content.strip())
 
         print(f"Generated main.tf for {cloud} in {cluster_dir}.")
+        # Insert cluster state into the PG database
+        self.pg_backend.insert_state(cluster_name, "main.tf", "generated", "success", {"content": main_tf_content})
 
 
     def substitute_values(self, config, subdir=None):
@@ -78,15 +82,6 @@ module "k3s_worker_{cloud}_{i}" {{
         cloud_template_dir = os.path.join(self.template_dir, cloud)
         env = jinja2.Environment(loader=jinja2.FileSystemLoader(self.template_dir))
 
-        # # Determine roles
-        # roles = ['master', 'ha', 'worker']
-        # if subdir:
-        #     role_subdirs = [subdir]  # Only use provided subdir
-        # else:
-        #     role_subdirs = roles  # Create subdirectories for each role (master, ha, worker)
-
-        # Render templates for each subdir (role or explicit subdir)
-        #for role_subdir in role_subdirs:
         role_dir = os.path.join(cluster_dir, subdir)
         os.makedirs(role_dir, exist_ok=True)
 
@@ -124,6 +119,10 @@ module "k3s_worker_{cloud}_{i}" {{
 
         cluster_dir = self.get_cluster_output_dir(cluster_name)
         config["k3s_role"] = "master"
+        
+        # Create table for the cluster in PostgreSQL
+        self.pg_backend.create_table_for_cluster(cluster_name)
+        
         self.substitute_values(config, f"k3s_master_{cloud}")
         target = "module.k3s_master"
         self.deploy(config, target, cluster_dir)
@@ -198,12 +197,15 @@ module "k3s_worker_{cloud}_{i}" {{
 
         except Exception as e:
             print(f"An unexpected error occurred during destruction of cluster '{cluster_name}': {e}")
+        finally:
+            # Clean up the state from PG if necessary
+            self.pg_backend.insert_state(cluster_name, "destruction", "complete", "success", {})
    
 swarmchestrate = Swarmchestrate(template_dir="templates", output_dir="output")
 
 
-swarmchestrate.deploy_k3s_master(aws_config)
-#swarmchestrate.deploy_k3s_ha(aws_config)
+#swarmchestrate.deploy_k3s_master(aws_config)
+swarmchestrate.deploy_k3s_ha(edge_config)
 #swarmchestrate.deploy_k3s_master(aws_config)
 #swarmchestrate.deploy_k3s_worker(openstack_config)
 

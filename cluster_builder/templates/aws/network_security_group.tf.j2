@@ -82,6 +82,14 @@ resource "aws_security_group" "k3s_security_group" {
     protocol    = "udp"
     cidr_blocks = ["0.0.0.0/0"]
     }
+  
+  # pg database port
+  ingress {
+    from_port   = 5432
+    to_port     = 5432
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"] 
+  }
 
   # Outbound rules
   egress {
