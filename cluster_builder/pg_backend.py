@@ -1,4 +1,5 @@
 import psycopg2
+import json
 from config import pg_config  # Assuming pg_config is a dictionary or separate config file
 
 class PGBackend:
@@ -13,7 +14,8 @@ class PGBackend:
                 host=pg_config['host'],
                 database=pg_config['database'],
                 user=pg_config['user'],
-                password=pg_config['password']
+                password=pg_config['password'],
+                sslmode=pg_config['sslmode']
             )
             self.cursor = self.connection.cursor()
             print("PostgreSQL connection established.")
@@ -24,7 +26,7 @@ class PGBackend:
         try:
             table_name = f"cluster_{cluster_name}"
             create_table_query = f"""
-            CREATE TABLE IF NOT EXISTS {table_name} (
+            CREATE TABLE IF NOT EXISTS "{table_name}" (
                 id SERIAL PRIMARY KEY,
                 resource_type VARCHAR(255),
                 resource_name VARCHAR(255),
@@ -42,10 +44,11 @@ class PGBackend:
         try:
             table_name = f"cluster_{cluster_name}"
             insert_query = f"""
-            INSERT INTO {table_name} (resource_type, resource_name, status, state)
+            INSERT INTO "{table_name}" (resource_type, resource_name, status, state)
             VALUES (%s, %s, %s, %s)
             """
-            self.cursor.execute(insert_query, (resource_type, resource_name, status, state))
+            state_json = json.dumps(state)  # Convert dict to JSON
+            self.cursor.execute(insert_query, (resource_type, resource_name, status, state_json))
             self.connection.commit()
             print(f"State for {resource_name} inserted into {table_name}.")
         except Exception as error:

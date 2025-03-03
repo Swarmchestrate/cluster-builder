@@ -3,7 +3,7 @@ import os
 import subprocess
 import random
 import string
-from config import aws_config, openstack_config, edge_config
+from config import aws_config, openstack_config, edge_config, pg_config
 from pg_backend import PGBackend
 
 class Swarmchestrate:
@@ -17,14 +17,14 @@ class Swarmchestrate:
         self.pg_backend = PGBackend()
 
     def get_cluster_output_dir(self, cluster_name):
-        return os.path.join(self.output_dir, f"cluster-{cluster_name}")
+        return os.path.join(self.output_dir, f"cluster_{cluster_name}")
     
     def generate_cluster_name(self):
         """
         Generate a random cluster name.
         """
         random_str = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
-        return f"swarmchestrate-{random_str}"
+        return f"swarmchestrate_{random_str}"
     
     def generate_main_tf(self, config):
         """
@@ -33,18 +33,52 @@ class Swarmchestrate:
         cloud = config.get("cloud")
         cluster_name = config["cluster_name"]
         cluster_dir = self.get_cluster_output_dir(cluster_name)
+        main_tf_path = os.path.join(cluster_dir, "main.tf")
 
         os.makedirs(cluster_dir, exist_ok=True)
 
-        main_tf_content = f"""
+        # Read existing content if main.tf exists
+        if os.path.exists(main_tf_path):
+            with open(main_tf_path, "r") as f:
+                existing_content = f.read()
+        else:
+            existing_content = ""  # If it doesn't exist, start with an empty string
+
+        print(f"PostgreSQL host: {pg_config['host']}") #debug
+        # Generate the connection string
+        conn_str = f"postgres://{pg_config['user']}:{pg_config['password']}@{pg_config['host']}:5432/{pg_config['database']}?sslmode={pg_config['sslmode']}"
+
+# Terraform backend configuration
+        backend_config = f"""
+terraform {{
+  backend "pg" {{
+    conn_str = "{conn_str}"
+  }}
+}}
+""".strip()
+
+         # If backend config is already in existing content, remove duplicate
+        if 'backend "pg"' in existing_content:
+            existing_content = "\n".join(line for line in existing_content.splitlines() if 'backend "pg"' not in line)
+
+
+        new_content = ""
+
+        # Add master module if not present
+        if f'module "k3s_master"' not in existing_content and config["k3s_role"] == "master":
+            new_content += f"""
 module "k3s_master" {{
   source = "./k3s_master_{cloud}"
 }}
 """
 
-        if config.get(f"{cloud}_ha_server_count", 0) > 0:
-            main_tf_content += f"""
-module "k3s_ha_{cloud}" {{
+        # Handle HA servers (multiple)
+        ha_server_count = config.get(f"{cloud}_ha_server_count", 0)
+        for i in range(ha_server_count):
+            module_name = f'k3s_ha_{cloud}_{i}'
+            if module_name not in existing_content:
+                new_content += f"""
+module "{module_name}" {{
   source = "./k3s_ha_{cloud}"
   master_ip         = module.k3s_master.master_ip
   cluster_name      = module.k3s_master.cluster_name
@@ -52,21 +86,31 @@ module "k3s_ha_{cloud}" {{
 }}
 """
 
-        for i in range(config.get(f"{cloud}_worker_count", 0)):
-            main_tf_content += f"""
-module "k3s_worker_{cloud}_{i}" {{
-  source = "./k3s_worker_{cloud}_{i}"
+       # Handle worker nodes (multiple)
+        worker_count = config.get(f"{cloud}_worker_count", 0)
+        for i in range(worker_count):
+            module_name = f'k3s_worker_{cloud}_{i}'
+            if module_name not in existing_content:
+                new_content += f"""
+module "{module_name}" {{
+  source = "./k3s_worker_{cloud}"
   master_ip         = module.k3s_master.master_ip
   cluster_name      = module.k3s_master.cluster_name
   security_group_id = module.k3s_master.security_group_id
 }}
 """
-        with open(os.path.join(cluster_dir, "main.tf"), "w") as f:
-            f.write(main_tf_content.strip())
+        # Combine backend config with the rest of the content
+        final_content = backend_config + "\n\n" + existing_content.strip() + "\n\n" + new_content.strip()
 
-        print(f"Generated main.tf for {cloud} in {cluster_dir}.")
+        # Write the updated content to main.tf only if changes were made
+        if final_content.strip() != existing_content.strip():
+            with open(main_tf_path, "w") as f:
+                f.write(final_content)
+
+            print(f"Updated main.tf for {cloud} in {cluster_dir}.")
+
         # Insert cluster state into the PG database
-        self.pg_backend.insert_state(cluster_name, "main.tf", "generated", "success", {"content": main_tf_content})
+        self.pg_backend.insert_state(cluster_name, "main.tf", "generated", "success", {"content": final_content})
 
 
     def substitute_values(self, config, subdir=None):
@@ -127,18 +171,25 @@ module "k3s_worker_{cloud}_{i}" {{
         target = "module.k3s_master"
         self.deploy(config, target, cluster_dir)
 
-
     def deploy_k3s_ha(self, config):
         """
-        Deploy the K3s cluster using OpenTofu.
+        Deploy the K3s HA cluster using OpenTofu.
         """
         cloud = config["cloud"]
         cluster_name = config["cluster_name"]
         cluster_dir = self.get_cluster_output_dir(cluster_name)
         config["k3s_role"] = "ha"
-        self.substitute_values(config, f"k3s_ha_{cloud}")
-        target = "module.k3s_ha"
-        self.deploy(config, target, cluster_dir)
+
+        ha_server_count = config.get(f"{cloud}_ha_server_count", 0)
+
+        # Loop over the number of HA servers to handle multiple HA nodes
+        for i in range(ha_server_count):
+            subdir = f"k3s_ha_{cloud}_{i}"
+            self.substitute_values(config, f"k3s_ha_{cloud}_{i}")
+            
+            # Update the target to be specific for the HA module index
+            target = f"module.k3s_ha_{cloud}_{i}"  
+            self.deploy(config, target, cluster_dir)
 
 
     def deploy_k3s_worker(self, config):
@@ -204,8 +255,8 @@ module "k3s_worker_{cloud}_{i}" {{
 swarmchestrate = Swarmchestrate(template_dir="templates", output_dir="output")
 
 
-#swarmchestrate.deploy_k3s_master(aws_config)
-swarmchestrate.deploy_k3s_ha(edge_config)
+swarmchestrate.deploy_k3s_master(aws_config)
+#swarmchestrate.deploy_k3s_ha(edge_config)
 #swarmchestrate.deploy_k3s_master(aws_config)
 #swarmchestrate.deploy_k3s_worker(openstack_config)
 
