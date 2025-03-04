@@ -4,7 +4,6 @@ import subprocess
 import random
 import string
 from config import aws_config, openstack_config, edge_config, pg_config
-from pg_backend import PGBackend
 
 class Swarmchestrate:
     def __init__(self, template_dir, output_dir, variables=None):
@@ -14,7 +13,6 @@ class Swarmchestrate:
         """
         self.template_dir = f"{template_dir}"
         self.output_dir = output_dir
-        self.pg_backend = PGBackend()
 
     def get_cluster_output_dir(self, cluster_name):
         return os.path.join(self.output_dir, f"cluster_{cluster_name}")
@@ -25,8 +23,10 @@ class Swarmchestrate:
         """
         random_str = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
         return f"swarmchestrate_{random_str}"
+    # if id is provided use that as cluster name, if not provided use above logic
     
-    def generate_main_tf(self, config):
+    
+    def generate_main_tf(self, config, subdir):
         """
         Dynamically generate main.tf based on the configuration.
         """
@@ -53,18 +53,17 @@ class Swarmchestrate:
 terraform {{
   backend "pg" {{
     conn_str = "{conn_str}"
+    schema_name = "{cluster_name}"
   }}
 }}
 """.strip()
 
          # If backend config is already in existing content, remove duplicate
         if 'backend "pg"' in existing_content:
-            existing_content = "\n".join(line for line in existing_content.splitlines() if 'backend "pg"' not in line)
-
+            existing_content = backend_config + "\n\n" + existing_content.strip()
 
         new_content = ""
 
-        # Add master module if not present
         if f'module "k3s_master"' not in existing_content and config["k3s_role"] == "master":
             new_content += f"""
 module "k3s_master" {{
@@ -72,45 +71,26 @@ module "k3s_master" {{
 }}
 """
 
-        # Handle HA servers (multiple)
-        ha_server_count = config.get(f"{cloud}_ha_server_count", 0)
-        for i in range(ha_server_count):
-            module_name = f'k3s_ha_{cloud}_{i}'
+        if config["k3s_role"] == "worker" or  config["k3s_role"] == "ha":
+            module_name = f'{subdir}'
             if module_name not in existing_content:
                 new_content += f"""
 module "{module_name}" {{
-  source = "./k3s_ha_{cloud}"
+  source = "./{subdir}"
   master_ip         = module.k3s_master.master_ip
   cluster_name      = module.k3s_master.cluster_name
-  security_group_id = module.k3s_master.security_group_id
 }}
 """
 
-       # Handle worker nodes (multiple)
-        worker_count = config.get(f"{cloud}_worker_count", 0)
-        for i in range(worker_count):
-            module_name = f'k3s_worker_{cloud}_{i}'
-            if module_name not in existing_content:
-                new_content += f"""
-module "{module_name}" {{
-  source = "./k3s_worker_{cloud}"
-  master_ip         = module.k3s_master.master_ip
-  cluster_name      = module.k3s_master.cluster_name
-  security_group_id = module.k3s_master.security_group_id
-}}
-"""
-        # Combine backend config with the rest of the content
-        final_content = backend_config + "\n\n" + existing_content.strip() + "\n\n" + new_content.strip()
-
+         # Combine backend config with the rest of the content
+        final_content = existing_content.strip() + "\n\n" + new_content.strip()
+        
         # Write the updated content to main.tf only if changes were made
         if final_content.strip() != existing_content.strip():
             with open(main_tf_path, "w") as f:
                 f.write(final_content)
 
             print(f"Updated main.tf for {cloud} in {cluster_dir}.")
-
-        # Insert cluster state into the PG database
-        self.pg_backend.insert_state(cluster_name, "main.tf", "generated", "success", {"content": final_content})
 
 
     def substitute_values(self, config, subdir=None):
@@ -147,7 +127,7 @@ module "{module_name}" {{
             f.write(rendered_content)
         print(f"{cloud.upper()}: Rendered user_data.sh.tpl for {config['k3s_role'] } saved to: {output_path}")
 
-        self.generate_main_tf(config)
+        self.generate_main_tf(config, subdir)
 
     def deploy_k3s_master(self, config):
         """
@@ -164,9 +144,6 @@ module "{module_name}" {{
         cluster_dir = self.get_cluster_output_dir(cluster_name)
         config["k3s_role"] = "master"
         
-        # Create table for the cluster in PostgreSQL
-        self.pg_backend.create_table_for_cluster(cluster_name)
-        
         self.substitute_values(config, f"k3s_master_{cloud}")
         target = "module.k3s_master"
         self.deploy(config, target, cluster_dir)
@@ -178,18 +155,14 @@ module "{module_name}" {{
         cloud = config["cloud"]
         cluster_name = config["cluster_name"]
         cluster_dir = self.get_cluster_output_dir(cluster_name)
-        config["k3s_role"] = "ha"
 
-        ha_server_count = config.get(f"{cloud}_ha_server_count", 0)
+        random_str = ''.join(random.choices(string.ascii_lowercase + string.digits, k=4))
+        config[random_str] = random_str
 
-        # Loop over the number of HA servers to handle multiple HA nodes
-        for i in range(ha_server_count):
-            subdir = f"k3s_ha_{cloud}_{i}"
-            self.substitute_values(config, f"k3s_ha_{cloud}_{i}")
-            
-            # Update the target to be specific for the HA module index
-            target = f"module.k3s_ha_{cloud}_{i}"  
-            self.deploy(config, target, cluster_dir)
+        subdir = f"k3s_ha_{cloud}_{random_str}"
+        self.substitute_values(config, subdir)
+        target = f"module.k3s_ha_{cloud}_{random_str}"
+        self.deploy(config, target, cluster_dir)
 
 
     def deploy_k3s_worker(self, config):
@@ -199,27 +172,33 @@ module "{module_name}" {{
         cloud = config["cloud"]
         cluster_name = config["cluster_name"]
         cluster_dir = self.get_cluster_output_dir(cluster_name)
-        config["k3s_role"] = "worker"
-
-        worker_count = config.get(f"{cloud}_worker_count", 0)
-
-        for i in range(worker_count):
-            subdir = f"k3s_worker_{cloud}_{i}"
-            self.substitute_values(config, subdir)
-            target = f"module.k3s_worker_{cloud}_{i}"
-            self.deploy(config, target, cluster_dir)
-
+        
+        random_str = ''.join(random.choices(string.ascii_lowercase + string.digits, k=4))   
+        config[random_str] = random_str
+        
+        subdir = f"k3s_worker_{cloud}_{random_str}"
+        self.substitute_values(config, subdir)
+        target = f"module.k3s_worker_{cloud}_{random_str}"
+        self.deploy(config, target, cluster_dir)
 
     def deploy(self, config, target, cluster_dir, dryrun=False):
         """
-        Execute the OpenTofu commands to deploy the K3s component.
+        Execute OpenTofu commands to deploy the K3s component with error handling.
         """
-        print(f"Initializing OpenTofu for {config['cloud']} {config['k3s_role']} in {cluster_dir}...")
-        subprocess.run(["tofu", "init"], check=True, cwd=cluster_dir)
-        print(f"Planning infrastructure for {config['cloud']} {config['k3s_role']}...")
-        subprocess.run(["tofu", "plan", f"-target={target}"], check=True, cwd=cluster_dir)
-        print(f"Applying infrastructure for {config['cloud']} {config['k3s_role']}...")
-        subprocess.run(["tofu", "apply", "-auto-approve", f"-target={target}"], check=True, cwd=cluster_dir)
+        try:
+            print(f"Initializing OpenTofu for {config['cloud']} {config['k3s_role']} in {cluster_dir}...")
+            subprocess.run(["tofu", "init"], check=True, cwd=cluster_dir)
+            
+            print(f"Planning infrastructure for {config['cloud']} {config['k3s_role']}...")
+            subprocess.run(["tofu", "plan", f"-target={target}"], check=True, cwd=cluster_dir)
+            
+            print(f"Applying infrastructure for {config['cloud']} {config['k3s_role']}...")
+            subprocess.run(["tofu", "apply", "-auto-approve", f"-target={target}"], check=True, cwd=cluster_dir)
+            
+        except subprocess.CalledProcessError as e:
+            print(f"Error executing OpenTofu commands: {e}")
+        except Exception as e:
+            print(f"Unexpected error: {e}")
 
     def destroy(self, cluster_name):
         """
@@ -248,14 +227,12 @@ module "{module_name}" {{
 
         except Exception as e:
             print(f"An unexpected error occurred during destruction of cluster '{cluster_name}': {e}")
-        finally:
-            # Clean up the state from PG if necessary
-            self.pg_backend.insert_state(cluster_name, "destruction", "complete", "success", {})
    
 swarmchestrate = Swarmchestrate(template_dir="templates", output_dir="output")
 
-
-swarmchestrate.deploy_k3s_master(aws_config)
+#swarmchestrate.deploy_k3s_master(aws_config)
+swarmchestrate.deploy_k3s_ha(aws_config)
+#swarmchestrate.destroy("swarmchestrate_06z51q")
 #swarmchestrate.deploy_k3s_ha(edge_config)
 #swarmchestrate.deploy_k3s_master(aws_config)
 #swarmchestrate.deploy_k3s_worker(openstack_config)

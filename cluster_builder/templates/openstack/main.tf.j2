@@ -8,6 +8,7 @@ provider "openstack" {
 # Define cluster name from Python
 locals {
   cluster_name = "{{ cluster_name }}"
+  random_str = "{{ random_str }}"
 }
 
 # Auto-select network based on cluster name
@@ -81,22 +82,20 @@ variable "security_group_name" {
 
 # HA nodes
 resource "openstack_blockstorage_volume_v3" "root_volume" {
-  count       = {{ openstack_ha_server_count | default(1) }}
-  name        = "K3s-HA-Node-volume-${local.cluster_name}-${count.index + 1}"
+  name        = "K3s-HA-Node-volume-${local.cluster_name}-${random_str}"
   size        = "{{ size }}"
   volume_type = "{{ volume_type }}"
   image_id    = "{{ image_id }}"
 }
 
 resource "openstack_compute_instance_v2" "k3s_ha" {
-  count           = {{ openstack_ha_server_count | default(1) }}
-  name            = "K3s-HA-Server-${local.cluster_name}-${count.index + 1}"
+  name            = "K3s-HA-Server-${local.cluster_name}-${random_str}"
   flavor_id       = "{{ flavor_id }}"
   key_pair        = "{{ ssh_key_name }}"
   security_groups = [var.security_group_name]  # Use the passed security group name
 
   block_device {
-    uuid                  = openstack_blockstorage_volume_v3.root_volume[count.index].id
+    uuid                  = openstack_blockstorage_volume_v3.root_volume.id
     source_type           = "volume"
     destination_type      = "volume"
     boot_index            = 0
@@ -132,23 +131,21 @@ variable "security_group_name" {
 
 # Worker nodes
 resource "openstack_blockstorage_volume_v3" "root_volume" {
-  count       = {{ openstack_worker_count | default(1) }}
-  name        = "K3s-Worker-Node-volume-${local.cluster_name}-${count.index + 1}"
+  name        = "K3s-Worker-Node-volume-${local.cluster_name}-${random_str}"
   size        = "{{ size }}"
   volume_type = "{{ volume_type }}"
   image_id    = "{{ image_id }}"
 }
 
 resource "openstack_compute_instance_v2" "k3s_worker" {
-  count           = {{ openstack_worker_count | default(1) }}
-  name            = "K3s-Worker-Node-${local.cluster_name}-${count.index + 1}"
+  name            = "K3s-Worker-Node-${local.cluster_name}-${random_str}"
   image_id        = "{{ image_id }}"
   flavor_id       = "{{ flavor_id }}"
   key_pair        = "{{ ssh_key_name }}"
   security_groups = [var.security_group_name]  # Use the passed security group name
 
   block_device {
-    uuid                  = openstack_blockstorage_volume_v3.root_volume[count.index].id
+    uuid                  = openstack_blockstorage_volume_v3.root_volume.id
     source_type           = "volume"
     destination_type      = "volume"
     boot_index            = 0

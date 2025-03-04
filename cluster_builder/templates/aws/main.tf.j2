@@ -7,6 +7,7 @@ provider "aws" {
 # Use the cluster_name passed from Python (no need to generate a random string here)
 locals {
   cluster_name = "{{ cluster_name }}"
+  random_str = "{{ random_str }}"
 }
 
 {% if k3s_role == "master" %}
@@ -22,7 +23,7 @@ resource "aws_instance" "k3s_master" {
   })
 
   tags = {
-    Name        = "K3s-Master-Node-${local.cluster_name}"
+    Name        = "K3s-Master-Node-${local.cluster_name}-${random_str}"
     ClusterName = local.cluster_name
   }
 }
@@ -61,7 +62,6 @@ variable "security_group_id" {
 
 # HA nodes
 resource "aws_instance" "k3s_ha" {
-  count                  = {{ aws_ha_server_count }}
   ami                    = "{{ ami }}"
   instance_type          = "{{ instance_type }}"
   key_name               = "{{ ssh_key_name }}"
@@ -73,7 +73,7 @@ resource "aws_instance" "k3s_ha" {
   })
 
   tags = {
-    Name        = "K3s-HA-Server-${var.cluster_name}-${count.index + 1}"
+    Name        = "K3s-HA-Server-${var.cluster_name}"
     ClusterName = var.cluster_name
   }
 }
@@ -97,7 +97,6 @@ variable "security_group_id" {
 
 # Worker nodes (agents)
 resource "aws_instance" "k3s_worker" {
-  count                  = {{ aws_worker_count }}
   ami                    = "{{ ami }}"
   instance_type          = "{{ instance_type }}"
   key_name               = "{{ ssh_key_name }}"
@@ -109,7 +108,7 @@ resource "aws_instance" "k3s_worker" {
   })
 
   tags = {
-    Name = "K3s-Worker-Node-${var.cluster_name}-${count.index + 1}"
+    Name = "K3s-Worker-Node-${var.cluster_name}-${random_str}"
     ClusterName = var.cluster_name
   }
 }
