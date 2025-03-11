@@ -48,38 +48,6 @@ This command will:
 - Install Python dependencies listed in requirements.txt.
 - Download and configure OpenTofu for infrastructure management.
 
-### 4. Configuring AWS Credentials
-
-Set up your AWS credentials using the AWS CLI:
-
- ```bash
- aws configure
-```
-
-When prompted, provide the following details:
-- AWS Access Key ID
-- AWS Secret Access Key
-- Default region name (e.g., eu-west-2)
-- Default output format (leave blank or use json)
-
-### 5. Configuring Terraform Variables
-Update the terraform.tfvars file to define your AWS infrastructure parameters. Below is an example configuration:
-
- ```bash
-aws_region    = "eu-west-2"        # London region
-instance_type = "t2.micro"         # EC2 instance type
-ssh_key_name  = "my-ssh-key"       # AWS key pair name
-k3s_token     = "my-secret-token"  # K3s cluster token
-
-ami             = "ami-0c0493bbac867d427"  # Amazon Machine Image
-ha_server_count = 2                        # High-availability server count
-```
-
-Ensure the following:
-- The AMI ID matches a valid AMI in the specified AWS region.
-- The AWS region is correct.
-- The SSH key name corresponds to a key pair in your AWS account.
-
 ---
 
 ## Running the Code:
@@ -87,3 +55,35 @@ Ensure the following:
  ```bash
 python cluster-builder.py
 ```
+
+---
+
+## Edge Device Requirements
+
+To connect **edge devices** as part of your K3s cluster, ensure that the following **ports are open** on each edge device to enable communication within nodes:
+
+### Inbound Rules:
+
+| Port Range| Protocol| Purpose |
+|-----------|---------|----------|--------------------------------------------------|
+| 2379-2380 | TCP     | Internal servers communication for embedded etcd |
+| 6443      | TCP     | K3s API server communication |
+| 8472      | UDP     | Flannel VXLAN (network overlay) |
+| 10250     | TCP     | Kubelet metrics and communication |
+| 51820     | UDP     | WireGuard IPv4 (for encrypted networking) |
+| 51821     | UDP     | WireGuard IPv6 (for encrypted networking) |
+| 5001      | TCP     | Embedded registry (Spegel) |
+| 22        | TCP     | SSH access for provisioning and management |
+| 80        | TCP     | HTTP communication for web access |
+| 443       | TCP     | HTTPS communication for secure access |
+| 53        | UDP     | DNS (CoreDNS) for internal service discovery 
+| 5432      | TCP     | PostgreSQL database access |
+
+### Outbound Rule:
+
+| Port Range| Protocol | Purpose                                                |
+|-----------|----------|--------------------------------------------------------|
+| all       | all      | Allow all outbound traffic for the system's operations |
+
+
+---
