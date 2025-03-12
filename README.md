@@ -64,20 +64,20 @@ To connect **edge devices** as part of your K3s cluster, ensure that the followi
 
 ### Inbound Rules:
 
-| Port Range| Protocol| Purpose |
-|-----------|---------|----------|--------------------------------------------------|
-| 2379-2380 | TCP     | Internal servers communication for embedded etcd |
-| 6443      | TCP     | K3s API server communication |
-| 8472      | UDP     | Flannel VXLAN (network overlay) |
-| 10250     | TCP     | Kubelet metrics and communication |
-| 51820     | UDP     | WireGuard IPv4 (for encrypted networking) |
-| 51821     | UDP     | WireGuard IPv6 (for encrypted networking) |
-| 5001      | TCP     | Embedded registry (Spegel) |
-| 22        | TCP     | SSH access for provisioning and management |
-| 80        | TCP     | HTTP communication for web access |
-| 443       | TCP     | HTTPS communication for secure access |
-| 53        | UDP     | DNS (CoreDNS) for internal service discovery 
-| 5432      | TCP     | PostgreSQL database access |
+| Port Range| Protocol| Purpose                                                     |
+|-----------|---------|-------------------------------------------------------------|
+| 2379-2380 | TCP     | Internal servers communication for embedded etcd            |
+| 6443      | TCP     | K3s API server communication                                |
+| 8472      | UDP     | Flannel VXLAN (network overlay)                             |
+| 10250     | TCP     | Kubelet metrics and communication                           |
+| 51820     | UDP     | WireGuard IPv4 (for encrypted networking)                   |
+| 51821     | UDP     | WireGuard IPv6 (for encrypted networking)                   |
+| 5001      | TCP     | Embedded registry (Spegel)                                  |
+| 22        | TCP     | SSH access for provisioning and management                  |
+| 80        | TCP     | HTTP communication for web access                           |
+| 443       | TCP     | HTTPS communication for secure access                       |
+| 53        | UDP     | DNS (CoreDNS) for internal service discovery                |
+| 5432      | TCP     | PostgreSQL database access                                  |
 
 ### Outbound Rule:
 
