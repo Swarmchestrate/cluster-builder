@@ -1,9 +1,9 @@
+import re
 import jinja2
 import os
 import subprocess
-import random
-import string
-from config import aws_config, openstack_config, edge_config, pg_config
+from names_generator import generate_name
+from config import aws_config, pg_config
 
 class Swarmchestrate:
     def __init__(self, template_dir, output_dir, variables=None):
@@ -17,16 +17,24 @@ class Swarmchestrate:
     def get_cluster_output_dir(self, cluster_name):
         return os.path.join(self.output_dir, f"cluster_{cluster_name}")
     
+    def generate_random_name(self):
+        """Generate a readable random string using names-generator."""
+        return generate_name()  # Example output: 'stoic_fermi'
+
     def generate_cluster_name(self):
-        """
-        Generate a random cluster name.
-        """
-        random_str = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
-        return f"swarmchestrate_{random_str}"
-    # if id is provided use that as cluster name, if not provided use above logic
+        """Generate a human-readable cluster name."""
+        return f"swarmchestrate_{self.generate_random_name()}"
+    
+    # def generate_cluster_name(self):
+    #     """
+    #     Generate a random cluster name.
+    #     """
+    #     random_str = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
+    #     return f"swarmchestrate_{random_str}"
+    # # if id is provided use that as cluster name, if not provided use above logic
     
     
-    def generate_main_tf(self, config, subdir):
+    def generate_main_tf(self, config, subdir, random_name):
         """
         Dynamically generate main.tf based on the configuration.
         """
@@ -59,41 +67,49 @@ terraform {{
 """.strip()
 
          # If backend config is already in existing content, remove duplicate
-        if 'backend "pg"' in existing_content:
+        if 'backend "pg"' not in existing_content:
             existing_content = backend_config + "\n\n" + existing_content.strip()
 
-        new_content = ""
 
-        if f'module "k3s_master"' not in existing_content and config["k3s_role"] == "master":
-            new_content += f"""
+        new_content = existing_content
+
+            # Define master module definition
+        master_module_def = f"""
 module "k3s_master" {{
-  source = "./k3s_master_{cloud}"
+  source = "./{subdir}"
 }}
-"""
+""".strip()
 
-        if config["k3s_role"] == "worker" or  config["k3s_role"] == "ha":
-            module_name = f'{subdir}'
-            if module_name not in existing_content:
-                new_content += f"""
+        # Check if module "k3s_master" exists, add or replace it
+        if config["k3s_role"] == "master":
+            if 'module "k3s_master"' not in existing_content:
+                new_content += "\n\n" + master_module_def  # Add if it doesn't exist
+            else:
+                # Replace existing k3s_master module definition
+                new_content = re.sub(r'module\s+"k3s_master"\s*{[^}]+}', master_module_def, new_content)
+
+        if config["k3s_role"] in ["worker", "ha"]:
+            module_name = f"{subdir}"
+            module_def = f"""
 module "{module_name}" {{
   source = "./{subdir}"
-  master_ip         = module.k3s_master.master_ip
-  cluster_name      = module.k3s_master.cluster_name
+  master_ip         = "{config['master_ip']}"
+  cluster_name      = "{config['cluster_name']}"
 }}
-"""
+""".strip()
 
-         # Combine backend config with the rest of the content
-        final_content = existing_content.strip() + "\n\n" + new_content.strip()
-        
-        # Write the updated content to main.tf only if changes were made
-        if final_content.strip() != existing_content.strip():
+            if f'module "{module_name}"' not in existing_content:
+                new_content += "\n\n" + module_def
+                 
+        if new_content.strip() != existing_content.strip():
+            print(f"Updated main.tf content:\n{new_content}")  # Debugging print
             with open(main_tf_path, "w") as f:
-                f.write(final_content)
+                f.write(new_content)
 
             print(f"Updated main.tf for {cloud} in {cluster_dir}.")
 
 
-    def substitute_values(self, config, subdir=None):
+    def substitute_values(self, config, subdir=None, random_name=None):
         """
         Substitute values into Jinja2 templates and save the rendered files.
         This method will render main.tf, network_security_group, and other templates into their respective folders.
@@ -108,7 +124,9 @@ module "{module_name}" {{
 
         role_dir = os.path.join(cluster_dir, subdir)
         os.makedirs(role_dir, exist_ok=True)
-
+        
+        config["random_name"] = random_name
+         
         for template_name in os.listdir(cloud_template_dir):
             if template_name.endswith('.j2'):
                 template = env.get_template(f"{cloud}/{template_name}")
@@ -127,7 +145,7 @@ module "{module_name}" {{
             f.write(rendered_content)
         print(f"{cloud.upper()}: Rendered user_data.sh.tpl for {config['k3s_role'] } saved to: {output_path}")
 
-        self.generate_main_tf(config, subdir)
+        self.generate_main_tf(config, subdir, random_name)
 
     def deploy_k3s_master(self, config):
         """
@@ -138,13 +156,12 @@ module "{module_name}" {{
         # Generate a cluster name if not provided
         if "cluster_name" not in config:
             cluster_name = self.generate_cluster_name()
-        
-        config["cluster_name"] = cluster_name
 
+        config["cluster_name"] = cluster_name        
         cluster_dir = self.get_cluster_output_dir(cluster_name)
-        config["k3s_role"] = "master"
-        
-        self.substitute_values(config, f"k3s_master_{cloud}")
+        random_name = self.generate_random_name()
+        subdir = f"k3s_master_{cloud}_{random_name}"
+        self.substitute_values(config, subdir, random_name)
         target = "module.k3s_master"
         self.deploy(config, target, cluster_dir)
 
@@ -155,13 +172,10 @@ module "{module_name}" {{
         cloud = config["cloud"]
         cluster_name = config["cluster_name"]
         cluster_dir = self.get_cluster_output_dir(cluster_name)
-
-        random_str = ''.join(random.choices(string.ascii_lowercase + string.digits, k=4))
-        config[random_str] = random_str
-
-        subdir = f"k3s_ha_{cloud}_{random_str}"
-        self.substitute_values(config, subdir)
-        target = f"module.k3s_ha_{cloud}_{random_str}"
+        random_name = self.generate_random_name()
+        subdir = f"k3s_ha_{cloud}_{random_name}"
+        self.substitute_values(config, subdir, random_name)
+        target = f"module.k3s_ha_{cloud}_{random_name}"
         self.deploy(config, target, cluster_dir)
 
 
@@ -172,13 +186,10 @@ module "{module_name}" {{
         cloud = config["cloud"]
         cluster_name = config["cluster_name"]
         cluster_dir = self.get_cluster_output_dir(cluster_name)
-        
-        random_str = ''.join(random.choices(string.ascii_lowercase + string.digits, k=4))   
-        config[random_str] = random_str
-        
-        subdir = f"k3s_worker_{cloud}_{random_str}"
-        self.substitute_values(config, subdir)
-        target = f"module.k3s_worker_{cloud}_{random_str}"
+        random_name = self.generate_random_name()
+        subdir = f"k3s_worker_{cloud}_{random_name}"
+        self.substitute_values(config, subdir, random_name)
+        target = f"module.k3s_worker_{cloud}_{random_name}"
         self.deploy(config, target, cluster_dir)
 
     def deploy(self, config, target, cluster_dir, dryrun=False):
@@ -230,16 +241,9 @@ module "{module_name}" {{
    
 swarmchestrate = Swarmchestrate(template_dir="templates", output_dir="output")
 
-#swarmchestrate.deploy_k3s_master(aws_config)
-swarmchestrate.deploy_k3s_ha(aws_config)
+swarmchestrate.deploy_k3s_master(aws_config)
+#swarmchestrate.deploy_k3s_ha(aws_config)
 #swarmchestrate.destroy("swarmchestrate_06z51q")
 #swarmchestrate.deploy_k3s_ha(edge_config)
 #swarmchestrate.deploy_k3s_master(aws_config)
 #swarmchestrate.deploy_k3s_worker(openstack_config)
-
-# delay_seconds = 5 * 60
-# print(f"Waiting for {delay_seconds / 60} minutes before destroying resources...")
-# time.sleep(delay_seconds)
-
-# print("Starting the destruction process...")
-# swarmchestrate.destroy()
