@@ -4,112 +4,65 @@ provider "aws" {
   secret_key = "{{ aws_secret_key }}"
 }
 
-# Use the cluster_name passed from Python (no need to generate a random string here)
 locals {
   cluster_name = "{{ cluster_name }}"
-  random_str = "{{ random_str }}"
+  random_name  = "{{ random_name }}"
 }
 
-{% if k3s_role == "master" %}
-# Master node
-resource "aws_instance" "k3s_master" {
+# Common variables for HA and worker nodes (Only define for non-master roles)
+{% if k3s_role != "master" %}
+variable "master_ip" {
+  description = "Master node IP"
+  type        = string
+}
+
+variable "cluster_name" {
+  description = "The name of the cluster"
+  type        = string
+}
+
+{% endif %}
+
+# Role-specific resource creation
+resource "aws_instance" "k3s_node" {
   ami                    = "{{ ami }}"
   instance_type          = "{{ instance_type }}"
   key_name               = "{{ ssh_key_name }}"
-  vpc_security_group_ids = [aws_security_group.k3s_security_group.id]
+  vpc_security_group_ids = [
+    aws_security_group.k3s_security_group.id  # Referencing the security group here
+  ]
 
-  user_data = templatefile("master_user_data.sh.tpl", {
+  user_data = templatefile(
+  "{% if k3s_role == 'master' %}master_user_data.sh.tpl{% elif k3s_role == 'ha' %}ha_user_data.sh.tpl{% else %}worker_user_data.sh.tpl{% endif %}",
+  {
     k3s_token = "{{ k3s_token }}"
-  })
+    {% if k3s_role != "master" %}
+    master_ip = var.master_ip
+    {% endif %}
+    cluster_name = local.cluster_name
+    random_name = local.random_name
+  }
+)
+
 
   tags = {
-    Name        = "K3s-Master-Node-${local.cluster_name}-${random_str}"
+    Name        = "K3s-{{ k3s_role == 'master' and 'Master-Node' or (k3s_role == 'ha' and 'HA-Server' or 'Worker-Node') }}-{{ cluster_name }}-{{ random_name }}"
     ClusterName = local.cluster_name
   }
 }
 
-output "security_group_id" {
-  description = "The security group ID"
-  value       = aws_security_group.k3s_security_group.id
-}
-
+{% if k3s_role == "master" %}
 output "cluster_name" {
-  description = "The unique cluster name"
-  value       = local.cluster_name
+  description = <<EOF
+The unique cluster name
+EOF
+  value = local.cluster_name
 }
 
 output "master_ip" {
-  description = "The public IP of the master node"
-  value       = aws_instance.k3s_master.public_ip
-}
-{% endif %}
-
-{% if k3s_role == "ha" %}
-variable "master_ip" {
-  description = "Master node IP"
-  type        = string
-}
-
-variable "cluster_name" {
-  description = "The cluster name for all nodes"
-  type        = string
-}
-
-variable "security_group_id" {
-  description = "The security group of the cluster"
-  type        = string
-}
-
-# HA nodes
-resource "aws_instance" "k3s_ha" {
-  ami                    = "{{ ami }}"
-  instance_type          = "{{ instance_type }}"
-  key_name               = "{{ ssh_key_name }}"
-  vpc_security_group_ids = [var.security_group_id]
-
-  user_data = templatefile("ha_user_data.sh.tpl", {
-    k3s_token = "{{ k3s_token }}",
-    master_ip = var.master_ip
-  })
-
-  tags = {
-    Name        = "K3s-HA-Server-${var.cluster_name}"
-    ClusterName = var.cluster_name
-  }
-}
-{% endif %}
-
-{% if k3s_role == "worker" %}
-variable "master_ip" {
-  description = "Master node IP"
-  type        = string
-}
-
-variable "cluster_name" {
-  description = "The cluster name for all nodes"
-  type        = string
-}
-
-variable "security_group_id" {
-  description = "The security group of the cluster"
-  type        = string
-}
-
-# Worker nodes (agents)
-resource "aws_instance" "k3s_worker" {
-  ami                    = "{{ ami }}"
-  instance_type          = "{{ instance_type }}"
-  key_name               = "{{ ssh_key_name }}"
-  vpc_security_group_ids = [var.security_group_id]
-
-  user_data = templatefile("worker_user_data.sh.tpl", {
-    k3s_token = "{{ k3s_token }}",
-    master_ip = var.master_ip
-  })
-
-  tags = {
-    Name = "K3s-Worker-Node-${var.cluster_name}-${random_str}"
-    ClusterName = var.cluster_name
-  }
+  description = <<EOF
+The public IP of the master node
+EOF
+  value = aws_instance.k3s_node.public_ip
 }
 {% endif %}
