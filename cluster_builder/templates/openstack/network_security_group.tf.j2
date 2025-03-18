@@ -1,8 +1,11 @@
 resource "openstack_networking_secgroup_v2" "k3s_security_group" {
-  name        = "k3s-security-group-${local.cluster_name}"  # Add the cluster name here
+  name        = "k3s-security-group-${local.cluster_name}-${local.random_name}"  # Add the cluster name here
   description = "Security group for K3s nodes"
-}
 
+  tags = [
+    "K3s-Security-Group-${local.cluster_name}-${local.random_name}"
+  ]
+}
 {% set ingress_rules = [
     {"port_min": 2379, "port_max": 2380, "protocol": "tcp", "description": "Embedded etcd communication"},
     {"port_min": 6443, "port_max": 6443, "protocol": "tcp", "description": "K3s API server access"},
@@ -29,4 +32,3 @@ resource "openstack_networking_secgroup_rule_v2" "{{ rule.description | replace(
   security_group_id = openstack_networking_secgroup_v2.k3s_security_group.id
 }
 {% endfor %}
-
