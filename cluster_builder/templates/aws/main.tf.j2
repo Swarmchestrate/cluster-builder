@@ -53,16 +53,12 @@ resource "aws_instance" "k3s_node" {
 
 {% if k3s_role == "master" %}
 output "cluster_name" {
-  description = <<EOF
-The unique cluster name
-EOF
+  description = The unique cluster name
   value = local.cluster_name
 }
 
 output "master_ip" {
-  description = <<EOF
-The public IP of the master node
-EOF
+  description = The public IP of the master node
   value = aws_instance.k3s_node.public_ip
 }
 {% endif %}
