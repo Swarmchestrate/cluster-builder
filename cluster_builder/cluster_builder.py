@@ -25,15 +25,6 @@ class Swarmchestrate:
         """Generate a human-readable cluster name."""
         return f"swarmchestrate_{self.generate_random_name()}"
     
-    # def generate_cluster_name(self):
-    #     """
-    #     Generate a random cluster name.
-    #     """
-    #     random_str = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
-    #     return f"swarmchestrate_{random_str}"
-    # # if id is provided use that as cluster name, if not provided use above logic
-    
-    
     def generate_main_tf(self, config, subdir, random_name):
         """
         Dynamically generate main.tf based on the configuration.
