@@ -24,81 +24,6 @@ class Swarmchestrate:
     def generate_cluster_name(self):
         """Generate a human-readable cluster name."""
         return f"swarmchestrate_{self.generate_random_name()}"
-    
-    def generate_main_tf(self, config, subdir, random_name):
-        """
-        Dynamically generate main.tf based on the configuration.
-        """
-        cloud = config.get("cloud")
-        cluster_name = config["cluster_name"]
-        cluster_dir = self.get_cluster_output_dir(cluster_name)
-        main_tf_path = os.path.join(cluster_dir, "main.tf")
-
-        os.makedirs(cluster_dir, exist_ok=True)
-
-        # Read existing content if main.tf exists
-        if os.path.exists(main_tf_path):
-            with open(main_tf_path, "r") as f:
-                existing_content = f.read()
-        else:
-            existing_content = ""  # If it doesn't exist, start with an empty string
-
-        print(f"PostgreSQL host: {pg_config['host']}") #debug
-        # Generate the connection string
-        conn_str = f"postgres://{pg_config['user']}:{pg_config['password']}@{pg_config['host']}:5432/{pg_config['database']}?sslmode={pg_config['sslmode']}"
-
-# Terraform backend configuration
-        backend_config = f"""
-terraform {{
-  backend "pg" {{
-    conn_str = "{conn_str}"
-    schema_name = "{cluster_name}"
-  }}
-}}
-""".strip()
-
-         # If backend config is already in existing content, remove duplicate
-        if 'backend "pg"' not in existing_content:
-            existing_content = backend_config + "\n\n" + existing_content.strip()
-
-
-        new_content = existing_content
-
-            # Define master module definition
-        master_module_def = f"""
-module "k3s_master" {{
-  source = "./{subdir}"
-}}
-""".strip()
-
-        # Check if module "k3s_master" exists, add or replace it
-        if config["k3s_role"] == "master":
-            if 'module "k3s_master"' not in existing_content:
-                new_content += "\n\n" + master_module_def  # Add if it doesn't exist
-            else:
-                # Replace existing k3s_master module definition
-                new_content = re.sub(r'module\s+"k3s_master"\s*{[^}]+}', master_module_def, new_content)
-
-        if config["k3s_role"] in ["worker", "ha"]:
-            module_name = f"{subdir}"
-            module_def = f"""
-module "{module_name}" {{
-  source = "./{subdir}"
-  master_ip         = "{config['master_ip']}"
-  cluster_name      = "{config['cluster_name']}"
-}}
-""".strip()
-
-            if f'module "{module_name}"' not in existing_content:
-                new_content += "\n\n" + module_def
-                 
-        if new_content.strip() != existing_content.strip():
-            print(f"Updated main.tf content:\n{new_content}")  # Debugging print
-            with open(main_tf_path, "w") as f:
-                f.write(new_content)
-
-            print(f"Updated main.tf for {cloud} in {cluster_dir}.")
-
 
     def substitute_values(self, config, subdir=None, random_name=None):
         """
@@ -116,6 +41,10 @@ module "{module_name}" {{
         role_dir = os.path.join(cluster_dir, subdir)
         os.makedirs(role_dir, exist_ok=True)
         
+        # Add pg_config data to config to be rendered in templates
+        conn_str = f"postgres://{pg_config['user']}:{pg_config['password']}@{pg_config['host']}:5432/{pg_config['database']}?sslmode={pg_config['sslmode']}"
+        config["pg_conn_str"] = conn_str  # Add the connection string to the config
+
         config["random_name"] = random_name
          
         for template_name in os.listdir(cloud_template_dir):
@@ -130,13 +59,21 @@ module "{module_name}" {{
         
         template = env.get_template("user_data.sh.tpl.j2")
         rendered_content = template.render(config)
-        output_path = os.path.join(cluster_dir, f"{config['k3s_role']}_user_data.sh.tpl" ) # Removing '.j2'
+        output_path = os.path.join(role_dir, f"{config['k3s_role']}_user_data.sh.tpl" ) # Removing '.j2'
 
         with open(output_path, 'w') as f:
             f.write(rendered_content)
         print(f"{cloud.upper()}: Rendered user_data.sh.tpl for {config['k3s_role'] } saved to: {output_path}")
 
-        self.generate_main_tf(config, subdir, random_name)
+    def get_target_resource(self, cloud):
+        """
+        Returns the appropriate OpenTofu resource type for the given cloud provider.
+        """
+        cloud_resource_map = {
+            "aws": "aws_instance",
+            "openstack": "openstack_compute_instance_v2"
+        }
+        return cloud_resource_map.get(cloud)
 
     def deploy_k3s_master(self, config):
         """
@@ -153,8 +90,16 @@ module "{module_name}" {{
         random_name = self.generate_random_name()
         subdir = f"k3s_master_{cloud}_{random_name}"
         self.substitute_values(config, subdir, random_name)
-        target = "module.k3s_master"
-        self.deploy(config, target, cluster_dir)
+        role_dir = os.path.join(cluster_dir, subdir)
+        print(f"role dir: {role_dir}")
+        
+        # Get the correct resource type for OpenTofu
+        resource_type = self.get_target_resource(cloud)
+
+        # Generate the OpenTofu target string
+        target = f"{resource_type}.k3s_master_{random_name}"
+    
+        self.deploy(config, target, role_dir)
 
     def deploy_k3s_ha(self, config):
         """
@@ -166,8 +111,17 @@ module "{module_name}" {{
         random_name = self.generate_random_name()
         subdir = f"k3s_ha_{cloud}_{random_name}"
         self.substitute_values(config, subdir, random_name)
-        target = f"module.k3s_ha_{cloud}_{random_name}"
-        self.deploy(config, target, cluster_dir)
+        
+        role_dir = os.path.join(cluster_dir, subdir)
+        print(f"role dir: {role_dir}")
+        
+        # Get the correct resource type for OpenTofu
+        resource_type = self.get_target_resource(cloud)
+
+        # Generate the OpenTofu target string
+        target = f"{resource_type}.k3s_ha_{random_name}"
+    
+        self.deploy(config, target, role_dir)
 
 
     def deploy_k3s_worker(self, config):
@@ -180,22 +134,29 @@ module "{module_name}" {{
         random_name = self.generate_random_name()
         subdir = f"k3s_worker_{cloud}_{random_name}"
         self.substitute_values(config, subdir, random_name)
-        target = f"module.k3s_worker_{cloud}_{random_name}"
-        self.deploy(config, target, cluster_dir)
+        role_dir = os.path.join(cluster_dir, subdir)
+        print(f"role dir: {role_dir}")
+        # Get the correct resource type for OpenTofu
+        resource_type = self.get_target_resource(cloud)
 
-    def deploy(self, config, target, cluster_dir, dryrun=False):
+        # Generate the OpenTofu target string
+        target = f"{resource_type}.k3s_worker_{random_name}"
+
+        self.deploy(config, target, role_dir)
+
+    def deploy(self, config, target, role_dir, dryrun=False):
         """
         Execute OpenTofu commands to deploy the K3s component with error handling.
         """
         try:
-            print(f"Initializing OpenTofu for {config['cloud']} {config['k3s_role']} in {cluster_dir}...")
-            subprocess.run(["tofu", "init"], check=True, cwd=cluster_dir)
+            print(f"Initializing OpenTofu for {config['cloud']} {config['k3s_role']} in {role_dir}...")
+            subprocess.run(["tofu", "init"], check=True, cwd=role_dir)
             
             print(f"Planning infrastructure for {config['cloud']} {config['k3s_role']}...")
-            subprocess.run(["tofu", "plan", f"-target={target}"], check=True, cwd=cluster_dir)
+            subprocess.run(["tofu", "plan", f"-target={target}"], check=True, cwd=role_dir)
             
             print(f"Applying infrastructure for {config['cloud']} {config['k3s_role']}...")
-            subprocess.run(["tofu", "apply", "-auto-approve", f"-target={target}"], check=True, cwd=cluster_dir)
+            subprocess.run(["tofu", "apply", "-auto-approve", f"-target={target}"], check=True, cwd=role_dir)
             
         except subprocess.CalledProcessError as e:
             print(f"Error executing OpenTofu commands: {e}")
@@ -237,4 +198,4 @@ swarmchestrate.deploy_k3s_master(aws_config)
 #swarmchestrate.destroy("swarmchestrate_06z51q")
 #swarmchestrate.deploy_k3s_ha(edge_config)
 #swarmchestrate.deploy_k3s_master(aws_config)
-#swarmchestrate.deploy_k3s_worker(openstack_config)
+#swarmchestrate.deploy_k3s_worker(aws_config)
