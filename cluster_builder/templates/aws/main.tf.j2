@@ -7,58 +7,51 @@ provider "aws" {
 locals {
   cluster_name = "{{ cluster_name }}"
   random_name  = "{{ random_name }}"
+  {% if k3s_role != "master" %}
+  master_ip = "{{ master_ip }}"
+  {% endif %}
 }
 
-# Common variables for HA and worker nodes (Only define for non-master roles)
-{% if k3s_role != "master" %}
-variable "master_ip" {
-  description = "Master node IP"
-  type        = string
+terraform {
+  backend "pg" {
+    conn_str = "{{ pg_conn_str }}"
+    schema_name = "{{ cluster_name }}"
+  }
 }
 
-variable "cluster_name" {
-  description = "The name of the cluster"
-  type        = string
-}
-
-{% endif %}
-
-# Role-specific resource creation
-resource "aws_instance" "k3s_node" {
+resource "aws_instance" "k3s_{{ k3s_role }}_{{ random_name }}" {
   ami                    = "{{ ami }}"
   instance_type          = "{{ instance_type }}"
   key_name               = "{{ ssh_key_name }}"
+
+  # Attach a unique security group per node
   vpc_security_group_ids = [
-    aws_security_group.k3s_security_group.id  # Referencing the security group here
+    aws_security_group.k3s_{{ k3s_role }}_security_group_{{ random_name }}.id
   ]
 
   user_data = templatefile(
-  "{% if k3s_role == 'master' %}master_user_data.sh.tpl{% elif k3s_role == 'ha' %}ha_user_data.sh.tpl{% else %}worker_user_data.sh.tpl{% endif %}",
-  {
-    k3s_token = "{{ k3s_token }}"
-    {% if k3s_role != "master" %}
-    master_ip = var.master_ip
-    {% endif %}
-    cluster_name = local.cluster_name
-    random_name = local.random_name
-  }
-)
-
+    "{% if k3s_role == 'master' %}master_user_data.sh.tpl{% elif k3s_role == 'ha' %}ha_user_data.sh.tpl{% else %}worker_user_data.sh.tpl{% endif %}",
+    {
+      k3s_token = "{{ k3s_token }}"
+      {% if k3s_role != "master" %}
+      master_ip = "{{ master_ip }}"
+      {% endif %}
+      cluster_name = "{{ cluster_name }}"
+    }
+  )
 
   tags = {
-    Name        = "K3s-{{ k3s_role == 'master' and 'Master-Node' or (k3s_role == 'ha' and 'HA-Server' or 'Worker-Node') }}-{{ cluster_name }}-{{ random_name }}"
-    ClusterName = local.cluster_name
+    Name        = "K3s-{% if k3s_role == 'master' %}Master-Node{% elif k3s_role == 'ha' %}HA-Server{% else %}Worker-Node{% endif %}-{{ cluster_name }}-{{ random_name }}"
+    ClusterName = "{{ cluster_name }}"
   }
 }
 
 {% if k3s_role == "master" %}
 output "cluster_name" {
-  description = The unique cluster name
   value = local.cluster_name
 }
 
 output "master_ip" {
-  description = The public IP of the master node
-  value = aws_instance.k3s_node.public_ip
+  value = aws_instance.k3s_{{ k3s_role }}_{{ random_name }}.public_ip
 }
 {% endif %}

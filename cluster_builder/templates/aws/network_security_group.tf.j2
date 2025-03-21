@@ -1,105 +1,39 @@
-# creating new network security group
+resource "aws_security_group" "k3s_{{k3s_role }}_security_group_{{ random_name }}" {
+  name        = "k3s-{{ k3s_role }}-security-group-${local.cluster_name}-${local.random_name}"
+  description = "Security group for K3s node in cluster ${local.cluster_name}"
 
-resource "aws_security_group" "k3s_security_group" {
-  name        = "k3s-security-group-${local.cluster_name}-${local.random_name}"
-  description = "Security group for K3s nodes"
-
-  # Inbound rules
-  ingress {
-    from_port   = 2379
-    to_port     = 2380
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]  # Internal servers communication for embedded etcd
-  }
-
-  ingress {
-    from_port   = 6443
-    to_port     = 6443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]  # Agents to servers for K3s API server also required for embedded distributed registry (Spegel)
-  }
-
-  ingress {
-    from_port   = 8472
-    to_port     = 8472
-    protocol    = "udp"
-    cidr_blocks = ["0.0.0.0/0"]  # VXLAN communication for Flannel
-  }
-
-  ingress {
-    from_port   = 10250
-    to_port     = 10250
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]  # Kubelet metrics communication
-  }
-
-  ingress {
-    from_port   = 51820
-    to_port     = 51820
-    protocol    = "udp"
-    cidr_blocks = ["0.0.0.0/0"]  # Wireguard IPv4 for Flannel
-  }
-
-  ingress {
-    from_port   = 51821
-    to_port     = 51821
-    protocol    = "udp"
-    cidr_blocks = ["0.0.0.0/0"]  # Wireguard IPv6 for Flannel
-  }
-
-  ingress {
-    from_port   = 5001
-    to_port     = 5001
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]  # Required only for embedded distributed registry (Spegel)
-  }
-
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]  # Allow SSH from anywhere
+  dynamic "ingress" {
+    for_each = toset([
+      { from = 2379, to = 2380, proto = "tcp", desc = "etcd communication", roles = ["master", "ha"] },
+      { from = 6443, to = 6443, proto = "tcp", desc = "K3s API server", roles = ["master", "ha", "worker"] },
+      { from = 8472, to = 8472, proto = "udp", desc = "VXLAN for Flannel", roles = ["master", "ha", "worker"] },
+      { from = 10250, to = 10250, proto = "tcp", desc = "Kubelet metrics", roles = ["master", "ha", "worker"] },
+      { from = 51820, to = 51820, proto = "udp", desc = "Wireguard IPv4", roles = ["master", "ha", "worker"] },
+      { from = 51821, to = 51821, proto = "udp", desc = "Wireguard IPv6", roles = ["master", "ha", "worker"] },
+      { from = 5001, to = 5001, proto = "tcp", desc = "Embedded registry", roles = ["master", "ha"] },
+      { from = 22, to = 22, proto = "tcp", desc = "SSH access", roles = ["master", "ha", "worker"] },
+      { from = 80, to = 80, proto = "tcp", desc = "HTTP access", roles = ["master", "ha", "worker"] },
+      { from = 443, to = 443, proto = "tcp", desc = "HTTPS access", roles = ["master", "ha", "worker"] },
+      { from = 53, to = 53, proto = "udp", desc = "DNS for CoreDNS", roles = ["master", "ha", "worker"] },
+      { from = 5432, to = 5432, proto = "tcp", desc = "PostgreSQL access", roles = ["master"] }
+    ])
+    content {
+      from_port   = ingress.value.from
+      to_port     = ingress.value.to
+      protocol    = ingress.value.proto
+      cidr_blocks = ["0.0.0.0/0"]
+      description = ingress.value.desc
     }
-
-  ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]  # Allow HTTP from anywhere
-    }
-
-  ingress {
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]  # Allow HTTPS from anywhere
-    }
-
-  # Allow DNS (port 53) for CoreDNS (if using CoreDNS for internal service discovery)
-  ingress {
-    from_port   = 53
-    to_port     = 53
-    protocol    = "udp"
-    cidr_blocks = ["0.0.0.0/0"]
-    }
-  
-  # pg database port
-  ingress {
-    from_port   = 5432
-    to_port     = 5432
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"] 
   }
 
-  # Outbound rules
   egress {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"] # Allow all outbound traffic
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   tags = {
-    Name = "K3s-Security-Group-${local.cluster_name}-${local.random_name}"
+    Name = "K3s-{{ k3s_role }}-Security-Group-${local.cluster_name}-${local.random_name}"
   }
 }
