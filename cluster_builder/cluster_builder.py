@@ -3,16 +3,16 @@ import jinja2
 import os
 import subprocess
 from names_generator import generate_name
-from config import aws_config, pg_config
 
 class Swarmchestrate:
-    def __init__(self, template_dir, output_dir, variables=None):
+    def __init__(self, template_dir, output_dir, pg_config, variables=None):
         """
         Initialize the Swarmchestrate class.
 
         """
         self.template_dir = f"{template_dir}"
         self.output_dir = output_dir
+        self.pg_config = pg_config
 
     def get_cluster_output_dir(self, cluster_name):
         return os.path.join(self.output_dir, f"cluster_{cluster_name}")
@@ -42,9 +42,14 @@ class Swarmchestrate:
         os.makedirs(role_dir, exist_ok=True)
         
         # Add pg_config data to config to be rendered in templates
-        conn_str = f"postgres://{pg_config['user']}:{pg_config['password']}@{pg_config['host']}:5432/{pg_config['database']}?sslmode={pg_config['sslmode']}"
+        conn_str = (
+            f"postgres://{self.pg_config['user']}:"
+            f"{self.pg_config['password']}@"
+            f"{self.pg_config['host']}:5432/"
+            f"{self.pg_config['database']}?"
+            f"sslmode={self.pg_config['sslmode']}"
+        )
         config["pg_conn_str"] = conn_str  # Add the connection string to the config
-
         config["random_name"] = random_name
          
         for template_name in os.listdir(cloud_template_dir):
@@ -191,9 +196,9 @@ class Swarmchestrate:
         except Exception as e:
             print(f"An unexpected error occurred during destruction of cluster '{cluster_name}': {e}")
    
-swarmchestrate = Swarmchestrate(template_dir="templates", output_dir="output")
+# swarmchestrate = Swarmchestrate(template_dir="templates", output_dir="output")
 
-swarmchestrate.deploy_k3s_master(aws_config)
+# swarmchestrate.deploy_k3s_master(aws_config)
 #swarmchestrate.deploy_k3s_ha(aws_config)
 #swarmchestrate.destroy("swarmchestrate_06z51q")
 #swarmchestrate.deploy_k3s_ha(edge_config)
