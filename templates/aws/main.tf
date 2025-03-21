@@ -1,6 +1,61 @@
-resource "aws_security_group" "k3s_{{k3s_role }}_security_group_{{ random_name }}" {
-  name        = "k3s-{{ k3s_role }}-security-group-${local.cluster_name}-${local.random_name}"
-  description = "Security group for K3s node in cluster ${local.cluster_name}"
+# variables.tf
+variable "aws_region" {}
+variable "aws_access_key" {}
+variable "aws_secret_key" {}
+variable "cluster_name" {}
+variable "resource_name" {}
+variable "k3s_role" {}
+variable "master_ip" {
+  default = null
+}
+variable "pg_conn_str" {}
+variable "ami" {}
+variable "instance_type" {}
+variable "ssh_key_name" {}
+variable "k3s_token" {}
+variable "cloud" {
+  default = null
+}
+variable "ha" {
+  default = null
+}
+
+# provider.tf
+provider "aws" {
+  region     = var.aws_region
+  access_key = var.aws_access_key
+  secret_key = var.aws_secret_key
+}
+
+# main.tf
+resource "aws_instance" "k3s_node" {
+  ami                    = var.ami
+  instance_type          = var.instance_type
+  key_name               = var.ssh_key_name
+
+  vpc_security_group_ids = [
+    aws_security_group.k3s_sg.id
+  ]
+
+  user_data = templatefile(
+    "${path.module}/${var.k3s_role}_user_data.sh.tpl",
+    {
+      ha            = var.ha,
+      k3s_token     = var.k3s_token,
+      master_ip     = var.master_ip,
+      cluster_name  = var.cluster_name
+    }
+  )
+
+  tags = {
+    Name        = var.resource_name
+    ClusterName = var.cluster_name
+  }
+}
+
+resource "aws_security_group" "k3s_sg" {
+  name        = "${var.k3s_role}-${var.cluster_name}-${var.resource_name}"
+  description = "Security group for K3s node in cluster ${var.cluster_name}"
 
   dynamic "ingress" {
     for_each = toset([
@@ -34,6 +89,15 @@ resource "aws_security_group" "k3s_{{k3s_role }}_security_group_{{ random_name }
   }
 
   tags = {
-    Name = "K3s-{{ k3s_role }}-Security-Group-${local.cluster_name}-${local.random_name}"
+    Name = "${var.k3s_role}-${var.cluster_name}-${var.resource_name}"
   }
+}
+
+# outputs.tf
+output "cluster_name" {
+  value = var.k3s_role == "master" ? var.cluster_name : null
+}
+
+output "master_ip" {
+  value = var.k3s_role == "master" ? aws_instance.k3s_node.public_ip : null
 }

@@ -85,6 +85,10 @@ class Swarmchestrate:
         Deploy the K3s cluster using OpenTofu.
         """
         cloud = config["cloud"]
+        role = config["k3s_role"]
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        templates_dir = os.path.join(base_dir, "templates")
+        config["module_source"] = f"{templates_dir}/{cloud}/"
 
         # Generate a cluster name if not provided
         if "cluster_name" not in config:
@@ -92,19 +96,35 @@ class Swarmchestrate:
             config["cluster_name"] = cluster_name
 
         cluster_dir = self.get_cluster_output_dir(config["cluster_name"])
-        random_name = self.generate_random_name()
-        subdir = f"k3s_master_{cloud}_{random_name}"
-        self.substitute_values(config, subdir, random_name)
-        role_dir = os.path.join(cluster_dir, subdir)
-        print(f"role dir: {role_dir}")
         
+        random_name = self.generate_random_name()
+        config["resource_name"] = f"{cloud}_{random_name}"
+
+        main_tf_path = os.path.join(cluster_dir, "main.tf")
+        backend_tf_path = os.path.join(cluster_dir, "backend.tf")
+        os.makedirs(os.path.dirname(main_tf_path), exist_ok=True)
+
+        user_data_src = os.path.join(templates_dir, f"{role}_user_data.sh.tpl")
+        user_data_dst = os.path.join(templates_dir, cloud, f"{role}_user_data.sh.tpl")
+        shutil.copy2(user_data_src, user_data_dst)
+
+        conn_str = (
+            f"postgres://{self.pg_config['user']}:"
+            f"{self.pg_config['password']}@"
+            f"{self.pg_config['host']}:5432/"
+            f"{self.pg_config['database']}?"
+            f"sslmode={self.pg_config['sslmode']}"
+        )
+        config["pg_conn_str"] = conn_str  # Add the connection string to the config
+        hcl.add_backend_config(backend_tf_path, conn_str, config["cluster_name"])
+
         # Get the correct resource type for OpenTofu
         resource_type = self.get_target_resource(cloud)
-
-        # Generate the OpenTofu target string
-        target = f"{resource_type}.k3s_master_{random_name}"
+        target = f"{resource_type}_{random_name}"
     
-        self.deploy(config, target, role_dir)
+        hcl.add_module_block(main_tf_path, target, config)
+        self.deploy(cluster_dir)
+        os.remove(user_data_dst) if os.path.exists(user_data_dst) else None
 
     def deploy_k3s_ha(self, config):
         """
@@ -149,19 +169,19 @@ class Swarmchestrate:
 
         self.deploy(config, target, role_dir)
 
-    def deploy(self, config, target, role_dir, dryrun=False):
+    def deploy(self, cluster_dir, dryrun=False):
         """
         Execute OpenTofu commands to deploy the K3s component with error handling.
         """
         try:
-            print(f"Initializing OpenTofu for {config['cloud']} {config['k3s_role']} in {role_dir}...")
-            subprocess.run(["tofu", "init"], check=True, cwd=role_dir)
+            print(f"Initializing OpenTofu...")
+            subprocess.run(["tofu", "init"], check=True, cwd=cluster_dir)
             
-            print(f"Planning infrastructure for {config['cloud']} {config['k3s_role']}...")
-            subprocess.run(["tofu", "plan", f"-target={target}"], check=True, cwd=role_dir)
+            print(f"Planning infrastructure...")
+            subprocess.run(["tofu", "plan"], check=True, cwd=cluster_dir)
             
-            print(f"Applying infrastructure for {config['cloud']} {config['k3s_role']}...")
-            subprocess.run(["tofu", "apply", "-auto-approve", f"-target={target}"], check=True, cwd=role_dir)
+            print(f"Applying infrastructure...")
+            subprocess.run(["tofu", "apply", "-auto-approve"], check=True, cwd=cluster_dir)
             
         except subprocess.CalledProcessError as e:
             print(f"Error executing OpenTofu commands: {e}")
