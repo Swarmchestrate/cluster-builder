@@ -1,0 +1,40 @@
+locals {
+  cluster_name   = "{{ cluster_name }}"  
+  edge_device_ip = "{{ edge_device_ip }}" 
+  k3s_token      = "{{ k3s_token }}" 
+  k3s_role       = "{{ k3s_role }}"
+  random_name     = "{{ random_name }}"
+
+  {% if k3s_role != "master" %}
+  master_ip      = "{{ master_ip }}"
+  {% endif %}
+}
+
+resource "null_resource" "deploy_k3s_edge" {
+
+  connection {
+    type        = "ssh"
+    user        = "{{ ssh_user }}"
+    password    = "{{ ssh_password }}"
+    host        = local.edge_device_ip
+  }
+
+  provisioner "file" {
+    source      = "${local.k3s_role}_user_data.sh"
+    destination = "/tmp/edge_user_data.sh"
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "chmod +x /tmp/edge_user_data.sh",
+      "sudo K3S_TOKEN='${local.k3s_token}' {% if k3s_role != 'master' %}MASTER_IP='${local.master_ip}'{% endif %} /tmp/edge_user_data.sh"
+    ]
+  }
+
+triggers = {
+    Name         = "K3s-${local.k3s_role}-${local.cluster_name}-${local.random_name}"
+    cluster_name = local.cluster_name
+    role         = local.k3s_role
+    random_name  = local.random_name
+  }
+}

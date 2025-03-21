@@ -1,0 +1,34 @@
+resource "openstack_networking_secgroup_v2" "k3s_security_group" {
+  name        = "k3s-security-group-${local.cluster_name}-${local.random_name}"  # Add the cluster name here
+  description = "Security group for K3s nodes"
+
+  tags = [
+    "K3s-Security-Group-${local.cluster_name}-${local.random_name}"
+  ]
+}
+{% set ingress_rules = [
+    {"port_min": 2379, "port_max": 2380, "protocol": "tcp", "description": "Embedded etcd communication"},
+    {"port_min": 6443, "port_max": 6443, "protocol": "tcp", "description": "K3s API server access"},
+    {"port_min": 8472, "port_max": 8472, "protocol": "udp", "description": "Flannel VXLAN communication"},
+    {"port_min": 10250, "port_max": 10250, "protocol": "tcp", "description": "Kubelet metrics"},
+    {"port_min": 51820, "port_max": 51820, "protocol": "udp", "description": "Wireguard IPv4"},
+    {"port_min": 51821, "port_max": 51821, "protocol": "udp", "description": "Wireguard IPv6"},
+    {"port_min": 5001, "port_max": 5001, "protocol": "tcp", "description": "Embedded registry (Spegel)"},
+    {"port_min": 22, "port_max": 22, "protocol": "tcp", "description": "SSH access"},
+    {"port_min": 80, "port_max": 80, "protocol": "tcp", "description": "HTTP access"},
+    {"port_min": 443, "port_max": 443, "protocol": "tcp", "description": "HTTPS access"},
+    {"port_min": 53, "port_max": 53, "protocol": "udp", "description": "DNS for CoreDNS"},
+    {"port_min": 5432, "port_max": 5432, "protocol": "tcp", "description": "pg database access"}
+] %}
+
+{% for rule in ingress_rules %}
+resource "openstack_networking_secgroup_rule_v2" "{{ rule.description | replace(' ', '_') | replace('(', '') | replace(')', '') | lower }}" {
+  direction        = "ingress"
+  ethertype        = "IPv4"
+  protocol         = "{{ rule.protocol }}"
+  port_range_min   = {{ rule.port_min }}
+  port_range_max   = {{ rule.port_max }}
+  remote_ip_prefix = "0.0.0.0/0"
+  security_group_id = openstack_networking_secgroup_v2.k3s_security_group.id
+}
+{% endfor %}

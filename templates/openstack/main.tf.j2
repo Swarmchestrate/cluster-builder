@@ -1,0 +1,76 @@
+provider "openstack" {
+  auth_url                     = "{{ auth_url }}"
+  application_credential_id     = "{{ application_credential_id }}"
+  application_credential_secret = "{{ application_credential_secret }}"
+  region                       = "{{ region }}"
+}
+
+locals {
+  cluster_name = "{{ cluster_name }}"
+  random_name  = "{{ random_name }}"
+}
+
+# Common variables for HA and worker nodes
+{% if k3s_role != "master" %}
+variable "master_ip" {
+  description = "Master node IP"
+  type        = string
+}
+{% endif %}
+
+# Network common to all nodes
+resource "openstack_networking_network_v2" "cluster_network" {
+  name = "network-${local.cluster_name}"
+}
+
+# Block storage for each node role
+resource "openstack_blockstorage_volume_v3" "root_volume" {
+  name        = "K3s-{{ 'Master-Node' if k3s_role == 'master' else ('HA-Node' if k3s_role == 'ha' else 'Worker-Node') }}-volume-${local.cluster_name}-${local.random_name}"
+  size        = "{{ size }}"
+  volume_type = "{{ volume_type }}"
+  image_id    = "{{ image_id }}"
+}
+
+# Compute instance for each role
+resource "openstack_compute_instance_v2" "k3s_node" {
+  name            = "K3s-{{ 'Master-Node' if k3s_role == 'master' else ('HA-Server' if k3s_role == 'ha' else 'Worker-Node') }}-${local.cluster_name}-${local.random_name}"
+  flavor_id       = "{{ flavor_id }}"
+  key_pair        = "{{ ssh_key_name }}"
+  security_groups = [
+      openstack_networking_secgroup_v2.k3s_security_group.name
+  ]
+
+  block_device {
+    uuid                  = openstack_blockstorage_volume_v3.root_volume.id
+    source_type           = "volume"
+    destination_type      = "volume"
+    boot_index            = 0
+    delete_on_termination = true
+  }
+
+  network {
+    uuid = openstack_networking_network_v2.cluster_network.id
+  }
+
+  user_data = templatefile(
+    "{{ 'master_user_data.sh.tpl' if k3s_role == 'master' else ('ha_user_data.sh.tpl' if k3s_role == 'ha' else 'worker_user_data.sh.tpl') }}",
+    {
+      k3s_token = "{{ k3s_token }}"{% if k3s_role != 'master' %},
+      master_ip = var.master_ip
+      {% endif %}
+    }
+  )
+}
+
+{% if k3s_role == "master" %}
+# Outputs only for master node
+output "cluster_name" {
+  description = "The unique cluster name"
+  value       = local.cluster_name
+}
+
+output "master_ip" {
+  description = "The floating IP of the master node"
+  value       = openstack_compute_instance_v2.k3s_node.access_ip_v4
+}
+{% endif %}
