@@ -1,3 +1,4 @@
+templates/*/*.sh.tpl
 test-out/
 output/
 config.py
