@@ -84,9 +84,9 @@ class Swarmchestrate:
         # Generate a cluster name if not provided
         if "cluster_name" not in config:
             cluster_name = self.generate_cluster_name()
+            config["cluster_name"] = cluster_name
 
-        config["cluster_name"] = cluster_name        
-        cluster_dir = self.get_cluster_output_dir(cluster_name)
+        cluster_dir = self.get_cluster_output_dir(config["cluster_name"])
         random_name = self.generate_random_name()
         subdir = f"k3s_master_{cloud}_{random_name}"
         self.substitute_values(config, subdir, random_name)
