@@ -48,7 +48,7 @@ resource "aws_instance" "k3s_node" {
   )
 
   tags = {
-    Name        = var.resource_name
+    Name        = "${var.cluster_name}-${var.resource_name}"
     ClusterName = var.cluster_name
   }
 }

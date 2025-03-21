@@ -1,4 +1,3 @@
-jinja2
 psycopg2-binary
 names_generator
 python-hcl2
