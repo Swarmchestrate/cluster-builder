@@ -2,6 +2,37 @@ import os
 import hcl2
 from lark import Tree, Token
 
+def add_backend_config(backend_tf_path, conn_str, schema_name):
+    """
+    Adds a PostgreSQL backend configuration to a Terraform file.
+    - `backend_tf_path`: path to backend.tf for this configuration
+    - `conn_str`: PostgreSQL connection string
+    - `schema_name`: Schema name for Terraform state
+    """
+    # Check if the backend configuration already exists
+    if os.path.exists(backend_tf_path):
+        with open(backend_tf_path) as f:
+            if 'backend "pg"' in f.read():
+                print(f"⚠️  Backend configuration already exists — skipping.")
+                return
+
+    # Build the backend configuration block
+    lines = [
+        'terraform {',
+        '  backend "pg" {',
+        f'    conn_str = "{conn_str}"',
+        f'    schema_name = "{schema_name}"',
+        '  }',
+        '}'
+    ]
+
+    # Write to backend.tf
+    os.makedirs(os.path.dirname(backend_tf_path), exist_ok=True)
+    with open(backend_tf_path, "w") as f:  # Use "w" instead of "a" to create/overwrite the file
+        f.write("\n".join(lines) + "\n")
+
+    print(f"✅ Added PostgreSQL backend configuration to {backend_tf_path}")
+
 def add_module_block(main_tf_path, module_name, config):
     """
     Appends a new module block to main.tf for this RA+cluster.
@@ -33,7 +64,6 @@ def add_module_block(main_tf_path, module_name, config):
     lines.append("}")
 
     # Write to main.tf
-    os.makedirs(os.path.dirname(main_tf_path), exist_ok=True)
     with open(main_tf_path, "a") as f:
         f.write("\n\n" + "\n".join(lines) + "\n")
 
