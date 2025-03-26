@@ -285,17 +285,28 @@ class Swarmchestrate:
 
         try:
             # Initialise OpenTofu
-            CommandExecutor.run_command(["tofu", "init"], cluster_dir, "OpenTofu init")
+            init_command = ["tofu", "init"]
+            if dryrun:
+                logger.info("Dryrun: will init without backend and validate only")
+                init_command.append("-backend=false")
+            CommandExecutor.run_command(init_command, cluster_dir, "OpenTofu init")
 
+            # Validate the deployment
+            if dryrun:
+                CommandExecutor.run_command(
+                    ["tofu", "validate"], cluster_dir, "OpenTofu validate"    
+                )
+                logger.info("Infrastructure successfully validated")
+                return 
+            
             # Plan the deployment
             CommandExecutor.run_command(["tofu", "plan"], cluster_dir, "OpenTofu plan")
 
-            # Apply if not a dry run
-            if not dryrun:
-                CommandExecutor.run_command(
-                    ["tofu", "apply", "-auto-approve"], cluster_dir, "OpenTofu apply"
-                )
-                logger.info("Infrastructure successfully deployed")
+            # Apply the deployment
+            CommandExecutor.run_command(
+                ["tofu", "apply", "-auto-approve"], cluster_dir, "OpenTofu apply"
+            )
+            logger.info("Infrastructure successfully deployed")
 
         except RuntimeError as e:
             error_msg = f"Failed to deploy infrastructure: {str(e)}"
