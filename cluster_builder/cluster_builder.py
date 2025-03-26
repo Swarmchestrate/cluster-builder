@@ -418,20 +418,21 @@ class Swarmchestrate:
             logger.error(error_msg)
             raise RuntimeError(error_msg)
 
-    def prepare_modules(self, config: Dict[str, Any]) -> None:
+    def prepare_modules(self, config: Dict[str, Any], dryrun: bool = False) -> None:
         """
         Prepare the module files for OpenTofu and deploy (legacy method).
 
         Args:
             config: Configuration dictionary containing cloud, k3s_role, and
                    optionally cluster_name
+            dryrun: Dryrun flag
 
         Raises:
             ValueError: If required configuration is missing
             RuntimeError: If file operations or OpenTofu commands fail
         """
         logger.warning("prepare_modules() is deprecated, use create_cluster() instead")
-        self.create_cluster(config)
+        self.create_cluster(config, dryrun)
 
     def deploy(self, cluster_dir: str, dryrun: bool = False) -> None:
         """
