@@ -1,7 +1,12 @@
 import os
 import tempfile
 import hcl2
-from cluster_builder.utils.hcl import add_backend_config, add_module_block, remove_module_block
+from cluster_builder.utils.hcl import (
+    add_backend_config,
+    add_module_block,
+    remove_module_block,
+)
+
 
 def test_add_backend_config_creates_file():
     # Arrange
@@ -12,7 +17,6 @@ def test_add_backend_config_creates_file():
 
         # Act
         add_backend_config(backend_tf_path, conn_str, schema_name)
-        
 
         # Assert
         assert os.path.exists(backend_tf_path), "backend.tf file was not created"
@@ -20,9 +24,16 @@ def test_add_backend_config_creates_file():
             parsed = hcl2.load(f)
             assert "terraform" in parsed, "Terraform block not found"
             assert "backend" in parsed["terraform"][0], "Backend block not found"
-            assert "pg" in parsed["terraform"][0]["backend"][0], "Backend type 'pg' not found"
-            assert parsed["terraform"][0]["backend"][0]["pg"]["conn_str"] == conn_str, "Connection string not found or incorrect"
-            assert parsed["terraform"][0]["backend"][0]["pg"]["schema_name"] == schema_name, "Schema name not found or incorrect"
+            assert "pg" in parsed["terraform"][0]["backend"][0], (
+                "Backend type 'pg' not found"
+            )
+            assert parsed["terraform"][0]["backend"][0]["pg"]["conn_str"] == conn_str, (
+                "Connection string not found or incorrect"
+            )
+            assert (
+                parsed["terraform"][0]["backend"][0]["pg"]["schema_name"] == schema_name
+            ), "Schema name not found or incorrect"
+
 
 def test_add_backend_config_skips_existing_file():
     # Arrange
@@ -44,8 +55,13 @@ def test_add_backend_config_skips_existing_file():
             print(parsed)
             f.seek(0)
             content = f.read()
-            assert 'conn_str = "existing"' in content, "Existing content was overwritten"
-            assert 'schema_name = "existing"' in content, "Existing content was overwritten"
+            assert 'conn_str = "existing"' in content, (
+                "Existing content was overwritten"
+            )
+            assert 'schema_name = "existing"' in content, (
+                "Existing content was overwritten"
+            )
+
 
 def test_remove_module_block_removes_existing_module():
     # Arrange
@@ -69,6 +85,7 @@ def test_remove_module_block_removes_existing_module():
             remaining_content = f.read()
             assert module_name not in remaining_content, "Module block was not removed"
 
+
 def test_remove_module_block_no_matching_module():
     # Arrange
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -89,7 +106,10 @@ def test_remove_module_block_no_matching_module():
         # Assert
         with open(main_tf_path, "r") as f:
             remaining_content = f.read()
-            assert "existing_module" in remaining_content, "Existing module block was incorrectly removed"
+            assert "existing_module" in remaining_content, (
+                "Existing module block was incorrectly removed"
+            )
+
 
 def test_remove_module_block_handles_missing_file():
     # Arrange
@@ -102,6 +122,7 @@ def test_remove_module_block_handles_missing_file():
             remove_module_block(main_tf_path, module_name)
         except Exception as e:
             assert False, f"Exception was raised: {e}"
+
 
 def test_remove_module_block_handles_invalid_hcl():
     # Arrange
@@ -121,6 +142,7 @@ def test_remove_module_block_handles_invalid_hcl():
             remove_module_block(main_tf_path, module_name)
         except Exception as e:
             assert False, f"Exception was raised: {e}"
+
 
 def test_add_module_block_creates_module():
     # Arrange
@@ -142,12 +164,23 @@ def test_add_module_block_creates_module():
         with open(main_tf_path, "r") as f:
             parsed = hcl2.load(f)
             assert "module" in parsed, "Module block not found"
-            assert module_name in parsed["module"][0], f"Module '{module_name}' not found"
+            assert module_name in parsed["module"][0], (
+                f"Module '{module_name}' not found"
+            )
             module_block = parsed["module"][0][module_name]
-            assert module_block["source"] == config["module_source"], "Module source was not added or incorrect"
-            assert module_block["param1"] == "value1", "String parameter was not added or incorrect"
-            assert module_block["param2"] == 42, "Integer parameter was not added or incorrect"
-            assert module_block["param3"] is True, "Boolean parameter was not added or incorrect"
+            assert module_block["source"] == config["module_source"], (
+                "Module source was not added or incorrect"
+            )
+            assert module_block["param1"] == "value1", (
+                "String parameter was not added or incorrect"
+            )
+            assert module_block["param2"] == 42, (
+                "Integer parameter was not added or incorrect"
+            )
+            assert module_block["param3"] is True, (
+                "Boolean parameter was not added or incorrect"
+            )
+
 
 def test_add_module_block_skips_existing_module():
     # Arrange
@@ -173,8 +206,13 @@ def test_add_module_block_skips_existing_module():
         # Assert
         with open(main_tf_path, "r") as f:
             content = f.read()
-            assert 'source = "existing/source"' in content, "Existing module block was overwritten"
-            assert 'param1 = "value1"' not in content, "New parameters were incorrectly added to existing module"
+            assert 'source = "existing/source"' in content, (
+                "Existing module block was overwritten"
+            )
+            assert 'param1 = "value1"' not in content, (
+                "New parameters were incorrectly added to existing module"
+            )
+
 
 def test_add_module_block_appends_to_existing_file():
     # Arrange
@@ -200,8 +238,11 @@ def test_add_module_block_appends_to_existing_file():
         # Assert
         with open(main_tf_path, "r") as f:
             content = f.read()
-            assert 'module "existing_module"' in content, "Existing module block was removed"
-            assert f'module "{module_name}"' in content, "New module block was not added"
+            assert 'module "existing_module"' in content, (
+                "Existing module block was removed"
+            )
+            assert f'module "{module_name}"' in content, (
+                "New module block was not added"
+            )
             assert 'source = "new/source"' in content, "New module source was not added"
             assert 'param1 = "value1"' in content, "New module parameter was not added"
-

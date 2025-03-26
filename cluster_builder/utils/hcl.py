@@ -2,6 +2,7 @@ import os
 import hcl2
 from lark import Tree, Token
 
+
 def add_backend_config(backend_tf_path, conn_str, schema_name):
     """
     Adds a PostgreSQL backend configuration to a Terraform file.
@@ -18,20 +19,23 @@ def add_backend_config(backend_tf_path, conn_str, schema_name):
 
     # Build the backend configuration block
     lines = [
-        'terraform {',
+        "terraform {",
         '  backend "pg" {',
         f'    conn_str = "{conn_str}"',
         f'    schema_name = "{schema_name}"',
-        '  }',
-        '}'
+        "  }",
+        "}",
     ]
 
     # Write to backend.tf
     os.makedirs(os.path.dirname(backend_tf_path), exist_ok=True)
-    with open(backend_tf_path, "w") as f:  # Use "w" instead of "a" to create/overwrite the file
+    with open(
+        backend_tf_path, "w"
+    ) as f:  # Use "w" instead of "a" to create/overwrite the file
         f.write("\n".join(lines) + "\n")
 
     print(f"✅ Added PostgreSQL backend configuration to {backend_tf_path}")
+
 
 def add_module_block(main_tf_path, module_name, config):
     """
@@ -60,7 +64,7 @@ def add_module_block(main_tf_path, module_name, config):
             continue
         else:
             v_str = f'"{v}"'
-        lines.append(f'  {k} = {v_str}')
+        lines.append(f"  {k} = {v_str}")
     lines.append("}")
 
     # Write to main.tf
@@ -74,31 +78,32 @@ def is_target_module_block(tree: Tree, module_name: str) -> bool:
     """
     Check if the tree is a module block with the specified name.
     """
-    if tree.data != 'block':
+    if tree.data != "block":
         return False
-        
+
     # Need at least 3 children: identifier, name, body
     if len(tree.children) < 3:
         return False
-        
+
     # First child should be an identifier tree
     first_child = tree.children[0]
-    if not isinstance(first_child, Tree) or first_child.data != 'identifier':
+    if not isinstance(first_child, Tree) or first_child.data != "identifier":
         return False
-        
+
     # First child should have a NAME token with 'module'
     if len(first_child.children) == 0 or not isinstance(first_child.children[0], Token):
         return False
-        
-    if first_child.children[0].value != 'module':
+
+    if first_child.children[0].value != "module":
         return False
-        
+
     # Second child should be a STRING_LIT token with module name
     second_child = tree.children[1]
     if not isinstance(second_child, Token) or second_child.value != f'"{module_name}"':
         return False
-        
+
     return True
+
 
 def simple_remove_module(tree, module_name, removed=False):
     """
@@ -106,39 +111,47 @@ def simple_remove_module(tree, module_name, removed=False):
     that the write function expects.
     """
     # Don't remove the root node
-    if tree.data == 'start':
+    if tree.data == "start":
         # Process only the body of the start rule
         body_node = tree.children[0]
-        
-        if isinstance(body_node, Tree) and body_node.data == 'body':
+
+        if isinstance(body_node, Tree) and body_node.data == "body":
             # Create new children list for the body node
             new_body_children = []
             skip_next = False
-            
+
             # Process body children (these should be blocks and new_line_or_comment nodes)
             for i, child in enumerate(body_node.children):
                 if skip_next:
                     skip_next = False
                     continue
-                    
+
                 # If this is a block node, check if it's our target
-                if isinstance(child, Tree) and child.data == 'block' and is_target_module_block(child, module_name):
+                if (
+                    isinstance(child, Tree)
+                    and child.data == "block"
+                    and is_target_module_block(child, module_name)
+                ):
                     removed = True
-                    
+
                     # Check if the next node is a new_line_or_comment, and skip it as well
                     if i + 1 < len(body_node.children):
                         next_child = body_node.children[i + 1]
-                        if isinstance(next_child, Tree) and next_child.data == 'new_line_or_comment':
+                        if (
+                            isinstance(next_child, Tree)
+                            and next_child.data == "new_line_or_comment"
+                        ):
                             skip_next = True
                 else:
                     new_body_children.append(child)
-            
+
             # Replace body children with filtered list
             new_body = Tree(body_node.data, new_body_children)
             return Tree(tree.data, [new_body]), removed
-            
+
     # No changes made
     return tree, removed
+
 
 def remove_module_block(main_tf_path, module_name: str):
     """
@@ -157,23 +170,24 @@ def remove_module_block(main_tf_path, module_name: str):
 
     # Process tree to remove target module block
     new_tree, removed = simple_remove_module(tree, module_name)
-    
+
     # If no modules were removed
     if not removed:
         print(f"⚠️  No module named '{module_name}' found in {main_tf_path}")
         return
-        
+
     try:
         # Reconstruct HCL
         new_source = hcl2.writes(new_tree)
-        
+
         # Write back to file
         with open(main_tf_path, "w") as f:
             f.write(new_source)
-            
+
         print(f"🗑️  Removed module '{module_name}' from {main_tf_path}")
     except Exception as e:
         print(f"❌ Failed to reconstruct HCL: {e}")
         # Print more detailed error information
         import traceback
+
         traceback.print_exc()

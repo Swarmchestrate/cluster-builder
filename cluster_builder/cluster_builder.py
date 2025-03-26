@@ -6,6 +6,7 @@ from names_generator import generate_name
 
 from cluster_builder.utils import hcl
 
+
 class Swarmchestrate:
     def __init__(self, template_dir, output_dir, pg_config, variables=None):
         """
@@ -18,7 +19,7 @@ class Swarmchestrate:
 
     def get_cluster_output_dir(self, cluster_name):
         return os.path.join(self.output_dir, f"cluster_{cluster_name}")
-    
+
     def generate_random_name(self):
         """Generate a readable random string using names-generator."""
         return generate_name()
@@ -39,7 +40,7 @@ class Swarmchestrate:
             config["cluster_name"] = cluster_name
 
         cluster_dir = self.get_cluster_output_dir(config["cluster_name"])
-        
+
         random_name = self.generate_random_name()
         config["resource_name"] = f"{cloud}_{random_name}"
 
@@ -62,10 +63,9 @@ class Swarmchestrate:
         hcl.add_backend_config(backend_tf_path, conn_str, config["cluster_name"])
 
         target = f"{cloud}_{random_name}"
-    
+
         hcl.add_module_block(main_tf_path, target, config)
         self.deploy(cluster_dir)
-
 
     def deploy(self, cluster_dir, dryrun=False):
         """
@@ -74,13 +74,15 @@ class Swarmchestrate:
         try:
             print(f"Initializing OpenTofu...")
             subprocess.run(["tofu", "init"], check=True, cwd=cluster_dir)
-            
+
             print(f"Planning infrastructure...")
             subprocess.run(["tofu", "plan"], check=True, cwd=cluster_dir)
-            
+
             print(f"Applying infrastructure...")
-            subprocess.run(["tofu", "apply", "-auto-approve"], check=True, cwd=cluster_dir)
-            
+            subprocess.run(
+                ["tofu", "apply", "-auto-approve"], check=True, cwd=cluster_dir
+            )
+
         except subprocess.CalledProcessError as e:
             print(f"Error executing OpenTofu commands: {e}")
         except Exception as e:
@@ -104,16 +106,20 @@ class Swarmchestrate:
             subprocess.run(["tofu", "plan", "-destroy"], check=True, cwd=cluster_dir)
 
             print(f"Destroying infrastructure for cluster '{cluster_name}'...")
-            subprocess.run(["tofu", "destroy", "-auto-approve"], check=True, cwd=cluster_dir)
+            subprocess.run(
+                ["tofu", "destroy", "-auto-approve"], check=True, cwd=cluster_dir
+            )
 
             print(f"Cluster '{cluster_name}' destroyed successfully.")
-    
+
         except subprocess.CalledProcessError as e:
             print(f"Error during destruction of cluster '{cluster_name}': {e}")
             return
 
         except Exception as e:
-            print(f"An unexpected error occurred during destruction of cluster '{cluster_name}': {e}")
+            print(
+                f"An unexpected error occurred during destruction of cluster '{cluster_name}': {e}"
+            )
             return
-        
+
         shutil.rmtree(cluster_dir, ignore_errors=True)
