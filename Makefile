@@ -1,5 +1,7 @@
 install:
 	pip install -r requirements.txt
+	pip install pytest
+	pip install -e .
 	curl --proto '=https' --tlsv1.2 -fsSL https://get.opentofu.org/install-opentofu.sh | bash -s -- --install-method standalone
 
 db:
