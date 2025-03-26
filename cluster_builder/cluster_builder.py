@@ -1,6 +1,7 @@
 import os
 import subprocess
 import shutil
+from typing import Dict, Any, Optional
 
 from names_generator import generate_name
 
@@ -8,25 +9,54 @@ from cluster_builder.utils import hcl
 
 
 class Swarmchestrate:
-    def __init__(self, template_dir, output_dir, pg_config, variables=None):
+    def __init__(
+        self, 
+        template_dir: str, 
+        output_dir: str, 
+        pg_config: Dict[str, str],
+        variables: Optional[Dict[str, Any]] = None
+    ):
         """
         Initialize the Swarmchestrate class.
-
+        
+        Args:
+            template_dir: Directory containing templates
+            output_dir: Directory for outputting generated files
+            pg_config: PostgreSQL configuration dictionary
+            variables: Optional additional variables for deployments
         """
         self.template_dir = f"{template_dir}"
         self.output_dir = output_dir
         self.pg_config = pg_config
 
-    def get_cluster_output_dir(self, cluster_name):
+    def get_cluster_output_dir(self, cluster_name: str) -> str:
+        """
+        Get the output directory path for a specific cluster.
+        
+        Args:
+            cluster_name: Name of the cluster
+            
+        Returns:
+            Path to the cluster output directory
+        """
         return os.path.join(self.output_dir, f"cluster_{cluster_name}")
 
-    def generate_random_name(self):
-        """Generate a readable random string using names-generator."""
+    def generate_random_name(self) -> str:
+        """
+        Generate a readable random string using names-generator.
+        
+        Returns:
+            A randomly generated name
+        """
         return generate_name()
 
-    def prepare_modules(self, config):
+    def prepare_modules(self, config: Dict[str, Any]) -> None:
         """
-        Prep the module files for OpenTofu.
+        Prepare the module files for OpenTofu.
+        
+        Args:
+            config: Configuration dictionary containing cloud, k3s_role, and
+                   optionally cluster_name
         """
         cloud = config["cloud"]
         role = config["k3s_role"]
@@ -57,7 +87,7 @@ class Swarmchestrate:
             f"{self.pg_config['password']}@"
             f"{self.pg_config['host']}:5432/"
             f"{self.pg_config['database']}?"
-            f"sslmode={self.pg_config['sslmode']}"
+            f"sslmode={self.pg_config.get('sslmode', 'prefer')}"
         )
         config["pg_conn_str"] = conn_str  # Add the connection string to the config
         hcl.add_backend_config(backend_tf_path, conn_str, config["cluster_name"])
@@ -67,9 +97,13 @@ class Swarmchestrate:
         hcl.add_module_block(main_tf_path, target, config)
         self.deploy(cluster_dir)
 
-    def deploy(self, cluster_dir, dryrun=False):
+    def deploy(self, cluster_dir: str, dryrun: bool = False) -> None:
         """
         Execute OpenTofu commands to deploy the K3s component with error handling.
+        
+        Args:
+            cluster_dir: Directory containing the Terraform files
+            dryrun: If True, only run init and plan without applying
         """
         try:
             print("Initializing OpenTofu...")
@@ -78,19 +112,23 @@ class Swarmchestrate:
             print("Planning infrastructure...")
             subprocess.run(["tofu", "plan"], check=True, cwd=cluster_dir)
 
-            print("Applying infrastructure...")
-            subprocess.run(
-                ["tofu", "apply", "-auto-approve"], check=True, cwd=cluster_dir
-            )
+            if not dryrun:
+                print("Applying infrastructure...")
+                subprocess.run(
+                    ["tofu", "apply", "-auto-approve"], check=True, cwd=cluster_dir
+                )
 
         except subprocess.CalledProcessError as e:
             print(f"Error executing OpenTofu commands: {e}")
         except Exception as e:
             print(f"Unexpected error: {e}")
 
-    def destroy(self, cluster_name):
+    def destroy(self, cluster_name: str) -> None:
         """
         Destroy the deployed K3s cluster for the specified cluster_name using OpenTofu.
+        
+        Args:
+            cluster_name: Name of the cluster to destroy
         """
         print(f"Destroying the K3s cluster '{cluster_name}'...")
 
