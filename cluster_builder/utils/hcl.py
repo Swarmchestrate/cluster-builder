@@ -14,7 +14,7 @@ def add_backend_config(backend_tf_path, conn_str, schema_name):
     if os.path.exists(backend_tf_path):
         with open(backend_tf_path) as f:
             if 'backend "pg"' in f.read():
-                print(f"⚠️  Backend configuration already exists — skipping.")
+                print("⚠️  Backend configuration already exists — skipping.")
                 return
 
     # Build the backend configuration block

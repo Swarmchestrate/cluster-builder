@@ -72,13 +72,13 @@ class Swarmchestrate:
         Execute OpenTofu commands to deploy the K3s component with error handling.
         """
         try:
-            print(f"Initializing OpenTofu...")
+            print("Initializing OpenTofu...")
             subprocess.run(["tofu", "init"], check=True, cwd=cluster_dir)
 
-            print(f"Planning infrastructure...")
+            print("Planning infrastructure...")
             subprocess.run(["tofu", "plan"], check=True, cwd=cluster_dir)
 
-            print(f"Applying infrastructure...")
+            print("Applying infrastructure...")
             subprocess.run(
                 ["tofu", "apply", "-auto-approve"], check=True, cwd=cluster_dir
             )
