@@ -65,6 +65,48 @@ class PostgresConfig:
         )
 
 
+class CommandExecutor:
+    """Utility for executing shell commands with proper logging and error handling."""
+
+    @staticmethod
+    def run_command(command: list, cwd: str, description: str = "command") -> str:
+        """
+        Execute a shell command with proper logging and error handling.
+
+        Args:
+            command: List containing the command and its arguments
+            cwd: Working directory for the command
+            description: Description of the command for logging
+
+        Returns:
+            Command stdout output as string
+
+        Raises:
+            RuntimeError: If the command execution fails
+        """
+        cmd_str = " ".join(command)
+        logger.info(f"Running {description}: {cmd_str}")
+
+        try:
+            result = subprocess.run(
+                command,
+                check=True,
+                cwd=cwd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            logger.debug(f"{description.capitalize()} output: {result.stdout}")
+            return result.stdout
+        except subprocess.CalledProcessError as e:
+            error_msg = f"Error executing {description}: {e.stderr}"
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
+        except Exception as e:
+            error_msg = f"Unexpected error during {description}: {str(e)}"
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
+
 
 class Swarmchestrate:
     def __init__(
@@ -242,47 +284,21 @@ class Swarmchestrate:
             raise RuntimeError(error_msg)
 
         try:
-            logger.info("Initializing OpenTofu...")
-            result = subprocess.run(
-                ["tofu", "init"],
-                check=True,
-                cwd=cluster_dir,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-            )
-            logger.debug(f"OpenTofu init output: {result.stdout}")
+            # Initialise OpenTofu
+            CommandExecutor.run_command(["tofu", "init"], cluster_dir, "OpenTofu init")
 
-            logger.info("Planning infrastructure...")
-            result = subprocess.run(
-                ["tofu", "plan"],
-                check=True,
-                cwd=cluster_dir,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-            )
-            logger.debug(f"OpenTofu plan output: {result.stdout}")
+            # Plan the deployment
+            CommandExecutor.run_command(["tofu", "plan"], cluster_dir, "OpenTofu plan")
 
+            # Apply if not a dry run
             if not dryrun:
-                logger.info("Applying infrastructure...")
-                result = subprocess.run(
-                    ["tofu", "apply", "-auto-approve"],
-                    check=True,
-                    cwd=cluster_dir,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
+                CommandExecutor.run_command(
+                    ["tofu", "apply", "-auto-approve"], cluster_dir, "OpenTofu apply"
                 )
-                logger.debug(f"OpenTofu apply output: {result.stdout}")
                 logger.info("Infrastructure successfully deployed")
 
-        except subprocess.CalledProcessError as e:
-            error_msg = f"Error executing OpenTofu command: {e.stderr}"
-            logger.error(error_msg)
-            raise RuntimeError(error_msg)
-        except Exception as e:
-            error_msg = f"Unexpected error during deployment: {str(e)}"
+        except RuntimeError as e:
+            error_msg = f"Failed to deploy infrastructure: {str(e)}"
             logger.error(error_msg)
             raise RuntimeError(error_msg)
 
@@ -307,40 +323,23 @@ class Swarmchestrate:
             raise RuntimeError(error_msg)
 
         try:
-            logger.info(f"Planning destruction for cluster '{cluster_name}'...")
-            result = subprocess.run(
-                ["tofu", "plan", "-destroy"],
-                check=True,
-                cwd=cluster_dir,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
+            # Plan destruction
+            CommandExecutor.run_command(
+                ["tofu", "plan", "-destroy"], cluster_dir, "OpenTofu plan destruction"
             )
-            logger.debug(f"OpenTofu plan destruction output: {result.stdout}")
 
-            logger.info(f"Destroying infrastructure for cluster '{cluster_name}'...")
-            result = subprocess.run(
-                ["tofu", "destroy", "-auto-approve"],
-                check=True,
-                cwd=cluster_dir,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
+            # Execute destruction
+            CommandExecutor.run_command(
+                ["tofu", "destroy", "-auto-approve"], cluster_dir, "OpenTofu destroy"
             )
-            logger.debug(f"OpenTofu destroy output: {result.stdout}")
+
             logger.info(f"Cluster '{cluster_name}' destroyed successfully")
 
             # Remove the cluster directory
             shutil.rmtree(cluster_dir, ignore_errors=True)
             logger.info(f"Removed cluster directory: {cluster_dir}")
 
-        except subprocess.CalledProcessError as e:
-            error_msg = (
-                f"Error during destruction of cluster '{cluster_name}': {e.stderr}"
-            )
-            logger.error(error_msg)
-            raise RuntimeError(error_msg)
-        except Exception as e:
-            error_msg = f"An unexpected error occurred during destruction of cluster '{cluster_name}': {str(e)}"
+        except RuntimeError as e:
+            error_msg = f"Failed to destroy cluster '{cluster_name}': {str(e)}"
             logger.error(error_msg)
             raise RuntimeError(error_msg)
