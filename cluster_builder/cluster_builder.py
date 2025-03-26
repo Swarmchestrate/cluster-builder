@@ -3,6 +3,7 @@ import subprocess
 import shutil
 import logging
 from typing import Dict, Any, Optional
+from dataclasses import dataclass
 
 from names_generator import generate_name
 
@@ -15,6 +16,56 @@ logging.basicConfig(
 logger = logging.getLogger("swarmchestrate")
 
 
+@dataclass
+class PostgresConfig:
+    """Configuration for PostgreSQL backend."""
+
+    user: str
+    password: str
+    host: str
+    database: str
+    sslmode: str = "prefer"
+
+    @classmethod
+    def from_dict(cls, config: Dict[str, str]) -> "PostgresConfig":
+        """
+        Create a PostgresConfig instance from a dictionary.
+
+        Args:
+            config: Dictionary containing PostgreSQL configuration
+
+        Returns:
+            PostgresConfig instance
+
+        Raises:
+            ValueError: If required configuration is missing
+        """
+        required_keys = ["user", "password", "host", "database"]
+        missing_keys = [key for key in required_keys if key not in config]
+
+        if missing_keys:
+            raise ValueError(
+                f"Missing required PostgreSQL configuration: {', '.join(missing_keys)}"
+            )
+
+        return cls(
+            user=config["user"],
+            password=config["password"],
+            host=config["host"],
+            database=config["database"],
+            sslmode=config.get("sslmode", "prefer"),
+        )
+
+    def get_connection_string(self) -> str:
+        """Generate a PostgreSQL connection string from the configuration."""
+        return (
+            f"postgres://{self.user}:{self.password}@"
+            f"{self.host}:5432/{self.database}?"
+            f"sslmode={self.sslmode}"
+        )
+
+
+
 class Swarmchestrate:
     def __init__(
         self,
@@ -24,7 +75,7 @@ class Swarmchestrate:
         variables: Optional[Dict[str, Any]] = None,
     ):
         """
-        Initialize the Swarmchestrate class.
+        Initialise the Swarmchestrate class.
 
         Args:
             template_dir: Directory containing templates
@@ -34,9 +85,15 @@ class Swarmchestrate:
         """
         self.template_dir = f"{template_dir}"
         self.output_dir = output_dir
-        self.pg_config = pg_config
+
+        try:
+            self.pg_config = PostgresConfig.from_dict(pg_config)
+        except ValueError as e:
+            logger.error(f"Invalid PostgreSQL configuration: {e}")
+            raise
+
         logger.info(
-            f"Initialized Swarmchestrate with template_dir={template_dir}, output_dir={output_dir}"
+            f"Initialised with template_dir={template_dir}, output_dir={output_dir}"
         )
 
     def get_cluster_output_dir(self, cluster_name: str) -> str:
@@ -143,13 +200,8 @@ class Swarmchestrate:
             raise RuntimeError(error_msg)
 
         try:
-            conn_str = (
-                f"postgres://{self.pg_config['user']}:"
-                f"{self.pg_config['password']}@"
-                f"{self.pg_config['host']}:5432/"
-                f"{self.pg_config['database']}?"
-                f"sslmode={self.pg_config.get('sslmode', 'prefer')}"
-            )
+            # Use PostgresConfig to generate connection string
+            conn_str = self.pg_config.get_connection_string()
             config["pg_conn_str"] = conn_str
 
             hcl.add_backend_config(backend_tf_path, conn_str, config["cluster_name"])
