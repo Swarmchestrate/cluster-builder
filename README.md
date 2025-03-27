@@ -79,9 +79,9 @@ POSTGRES_DATABASE=terraform_state
 POSTGRES_SSLMODE=prefer
 
 ## AWS Auth
-#AWS_REGION=us-west-2
-#AWS_ACCESS_KEY=AKIAXXXXXXXXXXXXXXXX
-#AWS_SECRET_KEY=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+AWS_REGION=us-west-2
+AWS_ACCESS_KEY=AKIAXXXXXXXXXXXXXXXX
+AWS_SECRET_KEY=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 ```
 
 ---
@@ -96,8 +96,7 @@ from cluster_builder import Swarmchestrate
 # Initialise the orchestrator
 orchestrator = Swarmchestrate(
     template_dir="/path/to/templates",
-    output_dir="/path/to/output",
-    pg_config=pg_config
+    output_dir="/path/to/output"
 )
 ```
 
