@@ -12,7 +12,14 @@ authors = [
     {name = "Jay", email = "J.Deslauriers@westminster.ac.uk"}
 ]
 license = {text = "Apache2"}
-dependencies = ["jinja2"]
+
+dependencies = [
+    "names_generator",
+    "python-hcl2",
+    "lark-parser",
+    "jinja2",
+    "python-dotenv"
+]
 
 [tool.setuptools]
 packages = ["cluster_builder"]
