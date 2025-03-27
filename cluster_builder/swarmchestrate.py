@@ -259,22 +259,6 @@ class Swarmchestrate:
             logger.error(error_msg)
             raise RuntimeError(error_msg)
 
-    def prepare_modules(self, config: dict[str, any], dryrun: bool = False) -> None:
-        """
-        Prepare the module files for OpenTofu and deploy (legacy method).
-
-        Args:
-            config: Configuration dictionary containing cloud, k3s_role, and
-                   optionally cluster_name
-            dryrun: Dryrun flag
-
-        Raises:
-            ValueError: If required configuration is missing
-            RuntimeError: If file operations or OpenTofu commands fail
-        """
-        logger.warning("prepare_modules() is deprecated, use add_node() instead")
-        self.add_node(config, dryrun)
-
     def deploy(self, cluster_dir: str, dryrun: bool = False) -> None:
         """
         Execute OpenTofu commands to deploy the K3s component with error handling.
