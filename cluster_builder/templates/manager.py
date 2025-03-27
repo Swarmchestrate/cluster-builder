@@ -68,8 +68,9 @@ class TemplateManager:
             logger.error(error_msg)
             raise RuntimeError(error_msg)
 
-
-    def create_provider_config(self, cluster_dir: str, cloud: str, config: dict) -> None:
+    def create_provider_config(
+        self, cluster_dir: str, cloud: str, config: dict
+    ) -> None:
         """
         Create provider configuration file for a specific cloud provider.
 
@@ -105,7 +106,9 @@ class TemplateManager:
             template_env = jinja2.Environment(loader=template_loader)
 
             # Get the template
-            template = template_env.get_template(os.path.basename(provider_template_path))
+            template = template_env.get_template(
+                os.path.basename(provider_template_path)
+            )
 
             # Render the template with the configuration
             content = template.render(**config)
