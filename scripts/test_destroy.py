@@ -1,9 +1,6 @@
-from config import pg_config
 from cluster_builder import Swarmchestrate
 
-CLUSTER_NAME = "nervous_pascal"
+CLUSTER_NAME = "funny_wilbur"
 
-swarmchestrate = Swarmchestrate(
-    template_dir="templates", output_dir="output", pg_config=pg_config
-)
+swarmchestrate = Swarmchestrate(template_dir="templates", output_dir="output")
 swarmchestrate.destroy(CLUSTER_NAME)
