@@ -7,6 +7,8 @@ import logging
 import shutil
 from typing import Optional
 
+from dotenv import load_dotenv
+
 from cluster_builder.config.postgres import PostgresConfig
 from cluster_builder.config.cluster import ClusterConfig
 from cluster_builder.templates.manager import TemplateManager
@@ -25,7 +27,6 @@ class Swarmchestrate:
         self,
         template_dir: str,
         output_dir: str,
-        pg_config: dict[str, str],
         variables: Optional[dict[str, any]] = None,
     ):
         """
@@ -40,8 +41,10 @@ class Swarmchestrate:
         self.template_dir = f"{template_dir}"
         self.output_dir = output_dir
 
+        load_dotenv()
+
         try:
-            self.pg_config = PostgresConfig.from_dict(pg_config)
+            self.pg_config = PostgresConfig.from_env()
         except ValueError as e:
             logger.error(f"Invalid PostgreSQL configuration: {e}")
             raise
@@ -135,14 +138,10 @@ class Swarmchestrate:
             # Prepare the configuration and files
             cluster_dir, prepared_config = self.cluster_config.prepare(config)
 
-            # Create provider configuration if it doesn't exist
-            provider_file = os.path.join(cluster_dir, "providers.tf")
-            if not os.path.exists(provider_file):
-                cloud = config["cloud"]
-                self.template_manager.create_provider_config(
-                    cluster_dir, cloud, prepared_config
-                )
-                logger.info(f"Created provider configuration for {cloud}")
+            # Create provider configuration
+            cloud = config["cloud"]
+            self.template_manager.create_provider_config(cluster_dir, cloud)
+            logger.info(f"Created provider configuration for {cloud}")
 
             # Create Terraform files
             main_tf_path = os.path.join(cluster_dir, "main.tf")
