@@ -18,7 +18,6 @@ Before proceeding, ensure the following prerequisites are installed:
 2. **Python**: Version 3.9 or higher.
 3. **pip**: Python package manager.
 4. **OpenTofu**: Version 1.6 or higher for infrastructure provisioning.
-5. **AWS CLI**: To manage AWS credentials.
 6. **Make**: To run the provided `Makefile`.
 7. **PostgreSQL**: For storing OpenTofu state.
 8. (Optional) **Docker**: To create a dev Postgres
