@@ -1,7 +1,5 @@
 # variables.tf
 variable "aws_region" {}
-variable "aws_access_key" {}
-variable "aws_secret_key" {}
 variable "cluster_name" {}
 variable "resource_name" {}
 variable "k3s_role" {}
