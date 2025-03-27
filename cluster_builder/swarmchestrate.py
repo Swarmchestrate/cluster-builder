@@ -35,7 +35,6 @@ class Swarmchestrate:
         Args:
             template_dir: Directory containing templates
             output_dir: Directory for outputting generated files
-            pg_config: PostgreSQL configuration dictionary
             variables: Optional additional variables for deployments
         """
         self.template_dir = f"{template_dir}"
