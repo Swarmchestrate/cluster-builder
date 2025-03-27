@@ -83,7 +83,7 @@ class TemplateManager:
             RuntimeError: If provider configuration cannot be created
             ValueError: If provider template is not found
         """
-        provider_file = os.path.join(cluster_dir, "providers.tf")
+        provider_file = os.path.join(cluster_dir, f"{cloud.lower()}_provider.tf")
 
         # Define the path for provider templates in the templates/ directory
         provider_template_path = os.path.join(
