@@ -20,13 +20,6 @@ variable "ha" {
   default = null
 }
 
-# provider.tf
-provider "aws" {
-  region     = var.aws_region
-  access_key = var.aws_access_key
-  secret_key = var.aws_secret_key
-}
-
 # main.tf
 resource "aws_instance" "k3s_node" {
   ami                    = var.ami
@@ -50,6 +43,7 @@ resource "aws_instance" "k3s_node" {
   tags = {
     Name        = "${var.cluster_name}-${var.resource_name}"
     ClusterName = var.cluster_name
+    Role        = var.k3s_role
   }
 }
 

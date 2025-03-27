@@ -112,14 +112,14 @@ class Swarmchestrate:
         self, config: dict[str, any]
     ) -> tuple[str, dict[str, any]]:
         """
-        Prepare a cluster configuration for deployment.
+        Prepare infrastructure configuration for deployment.
 
         This method prepares the necessary files and configuration for deployment
         but does not actually deploy the infrastructure.
 
         Args:
             config: Configuration dictionary containing cloud, k3s_role, and
-                   optionally cluster_name and master_ip
+                optionally cluster_name and master_ip
 
         Returns:
             Tuple containing the cluster directory path and updated configuration
@@ -134,6 +134,15 @@ class Swarmchestrate:
 
             # Prepare the configuration and files
             cluster_dir, prepared_config = self.cluster_config.prepare(config)
+
+            # Create provider configuration if it doesn't exist
+            provider_file = os.path.join(cluster_dir, "providers.tf")
+            if not os.path.exists(provider_file):
+                cloud = config["cloud"]
+                self.template_manager.create_provider_config(
+                    cluster_dir, cloud, prepared_config
+                )
+                logger.info(f"Created provider configuration for {cloud}")
 
             # Create Terraform files
             main_tf_path = os.path.join(cluster_dir, "main.tf")
@@ -188,7 +197,9 @@ class Swarmchestrate:
             self.deploy(cluster_dir, dryrun)
             cluster_name = prepared_config["cluster_name"]
             node_name = prepared_config["resource_name"]
-            logger.info(f"Successfully added '{node_name}' for cluster '{cluster_name}'")
+            logger.info(
+                f"Successfully added '{node_name}' for cluster '{cluster_name}'"
+            )
             return cluster_name
         except Exception as e:
             error_msg = f"Failed to add node: {e}"
