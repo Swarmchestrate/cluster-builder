@@ -60,6 +60,30 @@ This command will:
 This command will:
 - Spin up an empty dev Postgres DB (in Docker) for storing state
 
+### 4. Populate .env file with access config
+
+First, rename or copy the example file to `.env`
+
+```bash
+cp .env_example .env
+```
+
+Then populate postgres connection details and needed cloud credential data.
+
+```
+## PG Configuration
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=secret
+POSTGRES_HOST=db.example.com
+POSTGRES_DATABASE=terraform_state
+POSTGRES_SSLMODE=prefer
+
+## AWS Auth
+#AWS_REGION=us-west-2
+#AWS_ACCESS_KEY=AKIAXXXXXXXXXXXXXXXX
+#AWS_SECRET_KEY=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+```
+
 ---
 
 ## Basic Usage
@@ -68,14 +92,6 @@ This command will:
 
 ```python
 from cluster_builder import Swarmchestrate
-
-# PostgreSQL configuration for state management
-pg_config = {
-    "user": "postgres",
-    "password": "your_password",
-    "host": "localhost",
-    "database": "tf_states"
-}
 
 # Initialise the orchestrator
 orchestrator = Swarmchestrate(
@@ -94,9 +110,6 @@ To create a new k3s cluster, use the `add_node` method with the `master` role:
 config = {
     "cloud": "aws",
     "k3s_role": "master",
-    "aws_region": "us-west-2",
-    "aws_access_key": "YOUR_ACCESS_KEY",
-    "aws_secret_key": "YOUR_SECRET_KEY",
     "ami": "ami-0123456789abcdef",
     "instance_type": "t3.medium",
     "ssh_key_name": "your-ssh-key",
@@ -119,9 +132,6 @@ worker_config = {
     "k3s_role": "worker",  # can be "worker" or "ha"
     "master_ip": "1.2.3.4",  # IP of the master node
     "cluster_name": "existing-cluster-name",  # specify an existing cluster
-    "aws_region": "us-west-2",
-    "aws_access_key": "YOUR_ACCESS_KEY",
-    "aws_secret_key": "YOUR_SECRET_KEY",
     "ami": "ami-0123456789abcdef",
     "instance_type": "t2.medium",
     "ssh_key_name": "your-ssh-key",
@@ -173,7 +183,7 @@ The `destroy` method:
 ### Dry Run Mode
 
 All operations support a `dryrun` parameter, which validates the configuration 
-without making changes:
+without making changes. A node created with dryrun should be removed with dryrun.
 
 ```python
 # Validate configuration without deploying
