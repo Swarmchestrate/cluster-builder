@@ -48,34 +48,39 @@ class PostgresConfig:
             database=config["database"],
             sslmode=config.get("sslmode", "prefer"),
         )
-    
+
     @classmethod
     def from_env(cls) -> "PostgresConfig":
         """
         Create a PostgresConfig instance from environment variables.
-        
+
         Environment variables used:
         - POSTGRES_USER
         - POSTGRES_PASSWORD
         - POSTGRES_HOST
         - POSTGRES_DATABASE
         - POSTGRES_SSLMODE (optional, defaults to 'prefer')
-        
+
         Returns:
             PostgresConfig instance
-            
+
         Raises:
             ValueError: If required environment variables are missing
         """
         # Check for required environment variables
-        required_vars = ["POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_HOST", "POSTGRES_DATABASE"]
+        required_vars = [
+            "POSTGRES_USER",
+            "POSTGRES_PASSWORD",
+            "POSTGRES_HOST",
+            "POSTGRES_DATABASE",
+        ]
         missing_vars = [var for var in required_vars if not os.environ.get(var)]
-        
+
         if missing_vars:
             raise ValueError(
                 f"Missing required PostgreSQL environment variables: {', '.join(missing_vars)}"
             )
-        
+
         # Create config from environment variables
         return cls(
             user=os.environ["POSTGRES_USER"],
