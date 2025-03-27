@@ -8,4 +8,4 @@ from cluster_builder import Swarmchestrate
 swarmchestrate = Swarmchestrate(
     template_dir="templates", output_dir="output", pg_config=pg_config
 )
-swarmchestrate.create_cluster(aws_config)
+swarmchestrate.add_node(aws_config)
