@@ -77,7 +77,40 @@ class Swarmchestrate:
         """
         return self.cluster_config.generate_random_name()
 
-    def prepare_cluster(self, config: dict[str, any]) -> tuple[str, dict[str, any]]:
+    def _validate_node_config(self, config: dict[str, any]) -> None:
+        """
+        Validate node configuration.
+
+        Args:
+            config: Configuration dictionary
+
+        Raises:
+            ValueError: If configuration is invalid
+        """
+        # Check required fields
+        if "cloud" not in config:
+            raise ValueError("Cloud provider must be specified in configuration")
+
+        if "k3s_role" not in config:
+            raise ValueError("K3s role must be specified in configuration")
+
+        # Master IP validation
+        has_master_ip = "master_ip" in config and config["master_ip"]
+        role = config["k3s_role"]
+
+        # Cannot add a master node to an existing cluster
+        if has_master_ip and role == "master":
+            raise ValueError(
+                "Cannot add a master node to an existing cluster (master_ip specified with master role)"
+            )
+
+        # Worker/HA nodes require a master IP
+        if not has_master_ip and role in ["worker", "ha"]:
+            raise ValueError(f"Role '{role}' requires master_ip to be specified")
+
+    def prepare_infrastructure(
+        self, config: dict[str, any]
+    ) -> tuple[str, dict[str, any]]:
         """
         Prepare a cluster configuration for deployment.
 
@@ -86,16 +119,19 @@ class Swarmchestrate:
 
         Args:
             config: Configuration dictionary containing cloud, k3s_role, and
-                   optionally cluster_name
+                   optionally cluster_name and master_ip
 
         Returns:
             Tuple containing the cluster directory path and updated configuration
 
         Raises:
-            ValueError: If required configuration is missing
+            ValueError: If required configuration is missing or invalid
             RuntimeError: If file operations fail
         """
         try:
+            # Validate the configuration
+            self._validate_node_config(config)
+
             # Prepare the configuration and files
             cluster_dir, prepared_config = self.cluster_config.prepare(config)
 
@@ -119,39 +155,42 @@ class Swarmchestrate:
             return cluster_dir, prepared_config
 
         except Exception as e:
-            error_msg = f"Failed to prepare cluster: {e}"
+            error_msg = f"Failed to prepare infrastructure: {e}"
             logger.error(error_msg)
             raise RuntimeError(error_msg)
 
-    def create_cluster(self, config: dict[str, any], dryrun: bool = False) -> str:
+    def add_node(self, config: dict[str, any], dryrun: bool = False) -> str:
         """
-        Create a new cluster with the given configuration.
+        Add a node to an existing cluster or create a new cluster based on configuration.
 
-        This method prepares the configuration and then deploys the infrastructure.
+        If master_ip is provided, adds a node to that cluster.
+        If master_ip is not provided, creates a new cluster.
 
         Args:
             config: Configuration dictionary containing cloud, k3s_role, and
-                   optionally cluster_name
+                   optionally cluster_name and master_ip
             dryrun: If True, only validate the configuration without deploying
 
         Returns:
-            The name of the created cluster
+            The cluster name
 
         Raises:
-            ValueError: If required configuration is missing
+            ValueError: If required configuration is missing or invalid
             RuntimeError: If preparation or deployment fails
         """
-        # Prepare the cluster
-        cluster_dir, prepared_config = self.prepare_cluster(config)
+        # Prepare the infrastructure configuration
+        cluster_dir, prepared_config = self.prepare_infrastructure(config)
+
+        logger.info(f"Adding node for cluster '{prepared_config['cluster_name']}'")
 
         # Deploy the infrastructure
         try:
             self.deploy(cluster_dir, dryrun)
             cluster_name = prepared_config["cluster_name"]
-            logger.info(f"Successfully created cluster '{cluster_name}'")
+            logger.info(f"Successfully added node for cluster '{cluster_name}'")
             return cluster_name
         except Exception as e:
-            error_msg = f"Failed to create cluster: {e}"
+            error_msg = f"Failed to add node: {e}"
             logger.error(error_msg)
             raise RuntimeError(error_msg)
 
@@ -168,15 +207,15 @@ class Swarmchestrate:
             ValueError: If required configuration is missing
             RuntimeError: If file operations or OpenTofu commands fail
         """
-        logger.warning("prepare_modules() is deprecated, use create_cluster() instead")
-        self.create_cluster(config, dryrun)
+        logger.warning("prepare_modules() is deprecated, use add_node() instead")
+        self.add_node(config, dryrun)
 
     def deploy(self, cluster_dir: str, dryrun: bool = False) -> None:
         """
         Execute OpenTofu commands to deploy the K3s component with error handling.
 
         Args:
-            cluster_dir: Directory containing the Terraform files
+            cluster_dir: Directory containing the Terraform files for the cluster
             dryrun: If True, only run init and plan without applying
 
         Raises:
@@ -238,7 +277,7 @@ class Swarmchestrate:
             error_msg = f"Cluster directory '{cluster_dir}' not found"
             logger.error(error_msg)
             raise RuntimeError(error_msg)
-        
+
         if dryrun:
             logger.info("Dryrun: will only delete")
             shutil.rmtree(cluster_dir, ignore_errors=True)
