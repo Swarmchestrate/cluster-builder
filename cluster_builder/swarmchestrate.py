@@ -187,10 +187,66 @@ class Swarmchestrate:
         try:
             self.deploy(cluster_dir, dryrun)
             cluster_name = prepared_config["cluster_name"]
-            logger.info(f"Successfully added node for cluster '{cluster_name}'")
+            node_name = prepared_config["resource_name"]
+            logger.info(f"Successfully added '{node_name}' for cluster '{cluster_name}'")
             return cluster_name
         except Exception as e:
             error_msg = f"Failed to add node: {e}"
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
+
+    def remove_node(
+        self, cluster_name: str, resource_name: str, dryrun: bool = False
+    ) -> None:
+        """
+        Remove a specific node from a cluster.
+
+        This method removes a node's infrastructure component from a cluster by
+        removing its module block from the Terraform configuration and then
+        reapplying the configuration.
+
+        Args:
+            cluster_name: Name of the cluster containing the node
+            resource_name: Resource name of the node to remove
+            dryrun: If True, only validate the changes without applying
+
+        Raises:
+            RuntimeError: If node removal fails
+        """
+        logger.info(f"Removing node '{resource_name}' from cluster '{cluster_name}'...")
+
+        # Get the directory for the specified cluster
+        cluster_dir = self.get_cluster_output_dir(cluster_name)
+
+        if not os.path.exists(cluster_dir):
+            error_msg = f"Cluster directory '{cluster_dir}' not found"
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
+
+        # Path to main.tf
+        main_tf_path = os.path.join(cluster_dir, "main.tf")
+
+        if not os.path.exists(main_tf_path):
+            error_msg = f"Main Terraform file not found: {main_tf_path}"
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
+
+        try:
+            # Remove the module block for the specified resource
+            hcl.remove_module_block(main_tf_path, resource_name)
+            logger.info(
+                f"Removed module block for '{resource_name}' from {main_tf_path}"
+            )
+
+            self.deploy(cluster_dir, dryrun)
+
+            if not dryrun:
+                logger.info(
+                    f"Successfully removed node '{resource_name}' from cluster '{cluster_name}'"
+                )
+
+        except Exception as e:
+            error_msg = f"Failed to remove node '{resource_name}' from cluster '{cluster_name}': {str(e)}"
             logger.error(error_msg)
             raise RuntimeError(error_msg)
 
@@ -221,7 +277,7 @@ class Swarmchestrate:
         Raises:
             RuntimeError: If OpenTofu commands fail
         """
-        logger.info(f"Deploying infrastructure in {cluster_dir}")
+        logger.info(f"Updating infrastructure in {cluster_dir}")
 
         if not os.path.exists(cluster_dir):
             error_msg = f"Cluster directory '{cluster_dir}' not found"
@@ -251,7 +307,7 @@ class Swarmchestrate:
             CommandExecutor.run_command(
                 ["tofu", "apply", "-auto-approve"], cluster_dir, "OpenTofu apply"
             )
-            logger.info("Infrastructure successfully deployed")
+            logger.info("Infrastructure successfully updated")
 
         except RuntimeError as e:
             error_msg = f"Failed to deploy infrastructure: {str(e)}"
