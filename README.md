@@ -2,8 +2,10 @@
 
 This repository contains the codebase for **[cluster-builder]**, which builds K3s clusters for Swarmchestrate using OpenTofu.  
 
-The key features of this project include:  
-- **Create**: Provisions AWS infrastructure using OpenTofu and installs K3s in high-availability (HA) mode.  
+Key features:
+- **Create**: Provisions infrastructure using OpenTofu and installs K3s.
+- **Add**: Add worker or HA nodes to existing clusters.
+- **Remove**: Selectively remove nodes from existing clusters.  
 - **Delete**: Destroys the provisioned infrastructure when no longer required. 
 
 ---
@@ -13,11 +15,13 @@ The key features of this project include:
 Before proceeding, ensure the following prerequisites are installed:
 
 1. **Git**: For cloning the repository.
-2. **Python**: Version 3.7 or higher.
+2. **Python**: Version 3.9 or higher.
 3. **pip**: Python package manager.
-4. **AWS CLI**: To manage AWS credentials.
-5. **Make**: To run the provided `Makefile`.
-
+4. **OpenTofu**: Version 1.6 or higher for infrastructure provisioning.
+5. **AWS CLI**: To manage AWS credentials.
+6. **Make**: To run the provided `Makefile`.
+7. **PostgreSQL**: For storing OpenTofu state.
+8. (Optional) **Docker**: To create a dev Postgres
 ---
 
 ## Getting Started
@@ -40,7 +44,7 @@ cd cluster-builder
 
 Run the Makefile to install all necessary dependencies, including OpenTofu:
 
- ```bash
+```bash
  make install
 ```
 
@@ -48,13 +52,165 @@ This command will:
 - Install Python dependencies listed in requirements.txt.
 - Download and configure OpenTofu for infrastructure management.
 
+**Optional**
+
+```bash
+ make db
+```
+
+This command will:
+- Spin up an empty dev Postgres DB (in Docker) for storing state
+
 ---
 
-## Running the Code:
+## Basic Usage
 
- ```bash
-python cluster-builder.py
+### Initialisation
+
+```python
+from cluster_builder import Swarmchestrate
+
+# PostgreSQL configuration for state management
+pg_config = {
+    "user": "postgres",
+    "password": "your_password",
+    "host": "localhost",
+    "database": "tf_states"
+}
+
+# Initialise the orchestrator
+orchestrator = Swarmchestrate(
+    template_dir="/path/to/templates",
+    output_dir="/path/to/output",
+    pg_config=pg_config
+)
 ```
+
+### Creating a New Cluster
+
+To create a new k3s cluster, use the `add_node` method with the `master` role:
+
+```python
+# Configuration for a new cluster
+config = {
+    "cloud": "aws",
+    "k3s_role": "master",
+    "aws_region": "us-west-2",
+    "aws_access_key": "YOUR_ACCESS_KEY",
+    "aws_secret_key": "YOUR_SECRET_KEY",
+    "ami": "ami-0123456789abcdef",
+    "instance_type": "t3.medium",
+    "ssh_key_name": "your-ssh-key",
+    "k3s_token": "your-k3s-token"
+}
+
+# Create the cluster (returns the cluster name)
+cluster_name = orchestrator.add_node(config)
+print(f"Created cluster: {cluster_name}")
+```
+
+### Adding Nodes to an Existing Cluster
+
+To add worker or high-availability nodes to an existing cluster:
+
+```python
+# Configuration for adding a worker node
+worker_config = {
+    "cloud": "aws",
+    "k3s_role": "worker",  # can be "worker" or "ha"
+    "master_ip": "1.2.3.4",  # IP of the master node
+    "cluster_name": "existing-cluster-name",  # specify an existing cluster
+    "aws_region": "us-west-2",
+    "aws_access_key": "YOUR_ACCESS_KEY",
+    "aws_secret_key": "YOUR_SECRET_KEY",
+    "ami": "ami-0123456789abcdef",
+    "instance_type": "t2.medium",
+    "ssh_key_name": "your-ssh-key",
+    "k3s_token": "k3s-cluster-token" # Token of existing cluster
+}
+
+# Add the worker node
+cluster_name = orchestrator.add_node(worker_config)
+print(f"Added worker node to cluster: {cluster_name}")
+```
+
+Important requirements:
+- For `k3s_role="worker"` or `k3s_role="ha"`, you must specify a `master_ip`
+- For `k3s_role="master"`, you must not specify a `master_ip`
+
+### Removing a Specific Node
+
+To remove a specific node from a cluster:
+
+```python
+# Remove a node by its resource name
+orchestrator.remove_node(
+    cluster_name="your-cluster-name",
+    resource_name="aws_eloquent_feynman"  # The resource identifier of the node
+)
+```
+
+The `remove_node` method:
+1. Destroys the node's infrastructure resources
+2. Removes the node's configuration from the cluster
+
+### Destroying an Entire Cluster
+
+To completely destroy a cluster and all its nodes:
+
+```python
+# Destroy the entire cluster
+orchestrator.destroy(
+    cluster_name="your-cluster-name"
+)
+```
+
+The `destroy` method:
+1. Destroys all infrastructure resources associated with the cluster
+2. Removes the cluster directory and configuration files
+
+## Advanced Usage
+
+### Dry Run Mode
+
+All operations support a `dryrun` parameter, which validates the configuration 
+without making changes:
+
+```python
+# Validate configuration without deploying
+orchestrator.add_node(config, dryrun=True)
+
+# Validate removal without destroying
+orchestrator.remove_node(cluster_name, resource_name, dryrun=True)
+
+# Validate destruction without destroying
+orchestrator.destroy(cluster_name, dryrun=True)
+```
+
+### Custom Cluster Names
+
+By default, cluster names are generated automatically. To specify a custom name:
+
+```python
+config = {
+    "cloud": "aws",
+    "k3s_role": "master",
+    "cluster_name": "production-cluster",
+    # ... other configuration ...
+}
+
+orchestrator.add_node(config)
+```
+
+---
+
+## Template Structure
+
+Templates should be organised as follows:
+- `templates/` - Base directory for templates
+- `templates/{cloud}/` - Terraform modules for each cloud provider
+- `templates/{role}_user_data.sh.tpl` - Node initialisation scripts
+- `templates/{cloud}_provider.tf.j2` - Provider configuration templates
 
 ---
 
@@ -84,6 +240,3 @@ To connect **edge devices** as part of your K3s cluster, ensure that the followi
 | Port Range| Protocol | Purpose                                                |
 |-----------|----------|--------------------------------------------------------|
 | all       | all      | Allow all outbound traffic for the system's operations |
-
-
----
