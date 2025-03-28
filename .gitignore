@@ -1,4 +1,4 @@
-templates/*/*.sh.tpl
+*/templates/*/*.sh.tpl
 test-out/
 output/
 config.py
