@@ -6,9 +6,6 @@ import os
 import shutil
 import logging
 
-import jinja2
-
-from cluster_builder.config.cloud import CloudConfigLoader
 from cluster_builder.utils.hcl import extract_template_variables
 
 logger = logging.getLogger("swarmchestrate")
@@ -49,21 +46,11 @@ class TemplateManager:
             cloud: Cloud provider (e.g., 'aws')
 
         Raises:
-            RuntimeError: If provider configuration cannot be created
             ValueError: If provider template is not found
         """
-        # Load cloud-specific configuration from environment
-        try:
-            config = CloudConfigLoader.load(cloud)
-        except ValueError as e:
-            logger.error(f"Cloud configuration error: {e}")
-            raise
-
-        provider_file = os.path.join(cluster_dir, f"{cloud.lower()}_provider.tf")
-
-        # Define the path for provider templates in the templates/ directory
+        # Define the path for provider config in templates directory
         provider_template_path = os.path.join(
-            self.templates_dir, f"{cloud.lower()}_provider.tf.j2"
+            self.templates_dir, f"{cloud.lower()}_provider.tf"
         )
 
         # Check if template exists
@@ -74,31 +61,13 @@ class TemplateManager:
                 f"Provider template for cloud '{cloud}' not found. Expected at: {provider_template_path}"
             )
 
+        # Target file in cluster directory
+        provider_file = os.path.join(cluster_dir, f"{cloud.lower()}_provider.tf")
+
         try:
-            # Set up Jinja2 environment
-            template_loader = jinja2.FileSystemLoader(
-                os.path.dirname(provider_template_path)
-            )
-            template_env = jinja2.Environment(loader=template_loader)
-
-            # Get the template
-            template = template_env.get_template(
-                os.path.basename(provider_template_path)
-            )
-
-            # Render the template with the configuration
-            content = template.render(**config)
-
-            # Write the provider configuration
-            with open(provider_file, "w") as f:
-                f.write(content)
-
+            # Simply copy the provider config file to the cluster directory
+            shutil.copy2(provider_template_path, provider_file)
             logger.info(f"Created {cloud} provider configuration at {provider_file}")
-
-        except jinja2.exceptions.TemplateError as e:
-            error_msg = f"Template error creating provider configuration: {e}"
-            logger.error(error_msg)
-            raise RuntimeError(error_msg)
         except Exception as e:
             error_msg = f"Failed to create provider configuration: {e}"
             logger.error(error_msg)
