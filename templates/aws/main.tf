@@ -6,7 +6,6 @@ variable "k3s_role" {}
 variable "master_ip" {
   default = null
 }
-variable "pg_conn_str" {}
 variable "ami" {}
 variable "instance_type" {}
 variable "ssh_key_name" {}

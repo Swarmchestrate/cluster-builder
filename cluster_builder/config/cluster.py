@@ -20,7 +20,6 @@ class ClusterConfig:
         self,
         template_manager: TemplateManager,
         output_dir: str,
-        pg_config: PostgresConfig,
     ):
         """
         Initialise the ClusterConfig.
@@ -28,11 +27,9 @@ class ClusterConfig:
         Args:
             template_manager: Template manager instance
             output_dir: Directory for output files
-            pg_config: PostgreSQL configuration
         """
         self.template_manager = template_manager
         self.output_dir = output_dir
-        self.pg_config = pg_config
 
     def get_cluster_output_dir(self, cluster_name: str) -> str:
         """
@@ -126,8 +123,5 @@ class ClusterConfig:
         # Copy user data template
         self.template_manager.copy_user_data_template(role, cloud)
 
-        # Add PostgreSQL connection string to config
-        conn_str = self.pg_config.get_connection_string()
-        prepared_config["pg_conn_str"] = conn_str
 
         return cluster_dir, prepared_config

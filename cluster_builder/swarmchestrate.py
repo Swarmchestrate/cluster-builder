@@ -51,7 +51,7 @@ class Swarmchestrate:
         # Initialise components
         self.template_manager = TemplateManager()
         self.cluster_config = ClusterConfig(
-            self.template_manager, output_dir, self.pg_config
+            self.template_manager, output_dir
         )
 
         logger.info(
@@ -147,9 +147,12 @@ class Swarmchestrate:
             backend_tf_path = os.path.join(cluster_dir, "backend.tf")
 
             # Add backend configuration
+
+            # Add PostgreSQL connection string to config
+            conn_str = self.pg_config.get_connection_string()
             hcl.add_backend_config(
                 backend_tf_path,
-                prepared_config["pg_conn_str"],
+                conn_str,
                 prepared_config["cluster_name"],
             )
             logger.info(f"Added backend configuration to {backend_tf_path}")
