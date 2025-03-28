@@ -23,3 +23,9 @@ dependencies = [
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["cluster_builder*"]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.package-data]
+"cluster_builder" = ["templates/**/*"]
