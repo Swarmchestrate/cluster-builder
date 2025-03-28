@@ -304,7 +304,12 @@ class Swarmchestrate:
                 return
 
             # Plan the deployment
-            CommandExecutor.run_command(["tofu", "plan"], cluster_dir, "OpenTofu plan")
+            CommandExecutor.run_command(
+                ["tofu", "plan", "-input=false"],
+                cluster_dir,
+                "OpenTofu plan",
+                timeout=30,
+            )
 
             # Apply the deployment
             CommandExecutor.run_command(
@@ -345,7 +350,10 @@ class Swarmchestrate:
         try:
             # Plan destruction
             CommandExecutor.run_command(
-                ["tofu", "plan", "-destroy"], cluster_dir, "OpenTofu plan destruction"
+                ["tofu", "plan", "-destroy", "-input=false"],
+                cluster_dir,
+                "OpenTofu plan destruction",
+                timeout=30,
             )
 
             # Execute destruction
