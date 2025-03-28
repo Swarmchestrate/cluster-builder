@@ -7,7 +7,7 @@ import logging
 
 from names_generator import generate_name
 
-from cluster_builder.templates.manager import TemplateManager
+from cluster_builder.infrastructure import TemplateManager
 
 logger = logging.getLogger("swarmchestrate")
 

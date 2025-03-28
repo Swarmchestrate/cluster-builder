@@ -11,8 +11,8 @@ from dotenv import load_dotenv
 
 from cluster_builder.config.postgres import PostgresConfig
 from cluster_builder.config.cluster import ClusterConfig
-from cluster_builder.templates.manager import TemplateManager
-from cluster_builder.infrastructure.executor import CommandExecutor
+from cluster_builder.infrastructure import TemplateManager
+from cluster_builder.infrastructure import CommandExecutor
 from cluster_builder.utils import hcl
 
 logger = logging.getLogger("swarmchestrate")
