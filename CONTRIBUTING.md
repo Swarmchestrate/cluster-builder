@@ -89,12 +89,3 @@ output "master_ip" {
   value = var.k3s_role == "master" ? PROVIDER_instance.k3s_node.public_ip : null
 }
 ```
-
-
-## Code Style Guidelines
-
-Run `ruff check` and `ruff format` before submitting code, or use:
-
-```bash
-make check
-```
