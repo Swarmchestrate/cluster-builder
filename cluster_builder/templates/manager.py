@@ -9,6 +9,7 @@ import logging
 import jinja2
 
 from cluster_builder.config.cloud import CloudConfigLoader
+from cluster_builder.utils.hcl import extract_template_variables
 
 logger = logging.getLogger("swarmchestrate")
 
@@ -133,3 +134,16 @@ class TemplateManager:
             error_msg = f"Failed to copy user data template: {e}"
             logger.error(error_msg)
             raise RuntimeError(error_msg)
+
+    def get_required_variables(self, cloud: str) -> dict:
+        """
+        Get the variables required for a specific cloud provider's templates.
+
+        Args:
+            cloud: Cloud provider name (e.g., 'aws')
+
+        Returns:
+            Dictionary of variable names to their configurations
+        """
+        template_path = os.path.join(self.templates_dir, cloud, "main.tf")
+        return extract_template_variables(template_path)

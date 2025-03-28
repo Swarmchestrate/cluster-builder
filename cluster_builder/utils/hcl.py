@@ -191,3 +191,41 @@ def remove_module_block(main_tf_path, module_name: str):
         import traceback
 
         traceback.print_exc()
+
+
+def extract_template_variables(template_path):
+    """
+    Extract variables from a Terraform template file using hcl2.
+
+    Args:
+        template_path: Path to the Terraform template file
+
+    Returns:
+        Dictionary of variable names to their complete configuration
+
+    Raises:
+        ValueError: If the template cannot be parsed or variables cannot be extracted
+    """
+    try:
+        with open(template_path, "r") as f:
+            parsed = hcl2.load(f)
+
+        variables = {}
+
+        # Extract variables from the list of variable blocks
+        if "variable" in parsed:
+            for var_block in parsed["variable"]:
+                # Each var_block is a dict with a single key (the variable name)
+                for var_name, var_config in var_block.items():
+                    variables[var_name] = var_config
+
+        return variables
+
+    except FileNotFoundError:
+        print(f"Warning: Template file not found: {template_path}")
+        return {}
+
+    except Exception as e:
+        error_msg = f"Failed to extract variables from {template_path}: {e}"
+        print(f"Error: {error_msg}")
+        raise ValueError(error_msg)
