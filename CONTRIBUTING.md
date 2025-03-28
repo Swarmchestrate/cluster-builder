@@ -2,15 +2,6 @@
 
 This document outlines the process for adding support for new cloud providers to the Cluster Builder project.
 
-## Table of Contents
-
-- [Adding a New Cloud Provider](#adding-a-new-cloud-provider)
-  - [1. Create Provider Templates](#1-create-provider-templates)
-  - [2. Update Environment Examples](#2-update-environment-examples)
-- [Code Style Guidelines](#code-style-guidelines)
-
-## Adding a New Cloud Provider
-
 ### 1. Create Provider Templates
 
 In the `templates/` directory, create the following files for your cloud provider (replace `PROVIDER` with the lowercase name of your provider, e.g., `aws`, `gcp`, `azure`):
