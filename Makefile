@@ -6,8 +6,12 @@ dev:
 	pip install pytest ruff
 	pip install -e .
 
+check:
+	ruff check
+	ruff format
+
 db:
 	docker rm pg-db || echo "No container to remove"
 	docker run --name pg-db -e POSTGRES_USER=admin -e POSTGRES_PASSWORD=adminpass -e POSTGRES_DB=swarmchestrate -p 5432:5432 -d postgres
 
-.PHONY: install, db, dev
+.PHONY: install, db, dev, check
