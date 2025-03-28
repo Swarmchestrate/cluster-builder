@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cluster-builder"
-version = "0.2.0"
+version = "0.2.1"
 description = "Swarmchestrate cluster builder"
 readme = "README.md"
 authors = [
@@ -17,7 +17,6 @@ dependencies = [
     "names_generator",
     "python-hcl2",
     "lark-parser",
-    "jinja2",
     "python-dotenv"
 ]
 

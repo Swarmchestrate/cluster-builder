@@ -1,4 +1,3 @@
-jinja2
 names_generator
 python-hcl2
 lark-parser
