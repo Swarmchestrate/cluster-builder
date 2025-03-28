@@ -50,9 +50,7 @@ class Swarmchestrate:
 
         # Initialise components
         self.template_manager = TemplateManager()
-        self.cluster_config = ClusterConfig(
-            self.template_manager, output_dir
-        )
+        self.cluster_config = ClusterConfig(self.template_manager, output_dir)
 
         logger.info(
             f"Initialised with template_dir={template_dir}, output_dir={output_dir}"
