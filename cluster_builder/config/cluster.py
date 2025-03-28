@@ -7,7 +7,6 @@ import logging
 
 from names_generator import generate_name
 
-from cluster_builder.config.postgres import PostgresConfig
 from cluster_builder.templates.manager import TemplateManager
 
 logger = logging.getLogger("swarmchestrate")
@@ -122,6 +121,5 @@ class ClusterConfig:
 
         # Copy user data template
         self.template_manager.copy_user_data_template(role, cloud)
-
 
         return cluster_dir, prepared_config
