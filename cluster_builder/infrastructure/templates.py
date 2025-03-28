@@ -16,10 +16,8 @@ class TemplateManager:
 
     def __init__(self):
         """Initialise the TemplateManager."""
-        current_dir = os.path.dirname(os.path.abspath(__file__))  # templates directory
-        self.base_dir = os.path.dirname(
-            os.path.dirname(current_dir)
-        )  # Go up two levels
+        current_dir = os.path.dirname(os.path.abspath(__file__))  
+        self.base_dir = os.path.dirname(current_dir) # templates directory
         self.templates_dir = os.path.join(self.base_dir, "templates")
         logger.debug(
             f"Initialised TemplateManager with templates_dir={self.templates_dir}"

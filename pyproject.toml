@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cluster-builder"
-version = "0.2.1"
+version = "0.2.2"
 description = "Swarmchestrate cluster builder"
 readme = "README.md"
 authors = [
