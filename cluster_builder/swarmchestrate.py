@@ -79,23 +79,17 @@ class Swarmchestrate:
         """
         return self.cluster_config.generate_random_name()
 
-    def _validate_node_config(self, config: dict[str, any]) -> None:
+    def validate_configuration(self, cloud: str, config: dict) -> list:
         """
-        Validate node configuration.
+        Validate a configuration against the required variables for a cloud provider.
 
         Args:
-            config: Configuration dictionary
+            cloud: Cloud provider name
+            config: Configuration dictionary provided by the user
 
-        Raises:
-            ValueError: If configuration is invalid
+        Returns:
+            List of missing required variables (empty if all required variables are present)
         """
-        # Check required fields
-        if "cloud" not in config:
-            raise ValueError("Cloud provider must be specified in configuration")
-
-        if "k3s_role" not in config:
-            raise ValueError("K3s role must be specified in configuration")
-
         # Master IP validation
         has_master_ip = "master_ip" in config and config["master_ip"]
         role = config["k3s_role"]
@@ -103,12 +97,23 @@ class Swarmchestrate:
         # Cannot add a master node to an existing cluster
         if has_master_ip and role == "master":
             raise ValueError(
-                "Cannot add a master node to an existing cluster (master_ip specified with master role)"
+                "Cannot add master to existing cluster (master_ip specified with master role)"
             )
 
         # Worker/HA nodes require a master IP
         if not has_master_ip and role in ["worker", "ha"]:
             raise ValueError(f"Role '{role}' requires master_ip to be specified")
+
+        required_vars = self.template_manager.get_required_variables(cloud)
+
+        # Find missing required variables
+        missing_vars = []
+        for var_name, var_config in required_vars.items():
+            # If variable has no default and is not in config, it's required but missing
+            if "default" not in var_config and var_name not in config:
+                missing_vars.append(var_name)
+
+        return missing_vars
 
     def prepare_infrastructure(
         self, config: dict[str, any]
@@ -131,14 +136,18 @@ class Swarmchestrate:
             RuntimeError: If file operations fail
         """
         try:
-            # Validate the configuration
-            self._validate_node_config(config)
-
-            # Prepare the configuration and files
+            # Prepare the configuration
             cluster_dir, prepared_config = self.cluster_config.prepare(config)
 
+            # Validate the configuration
+            cloud = prepared_config["cloud"]
+            missing_vars = self.validate_configuration(cloud, prepared_config)
+            if missing_vars:
+                raise ValueError(
+                    f"Missing required variables for cloud provider '{cloud}': {', '.join(missing_vars)}"
+                )
+
             # Create provider configuration
-            cloud = config["cloud"]
             self.template_manager.create_provider_config(cluster_dir, cloud)
             logger.info(f"Created provider configuration for {cloud}")
 
