@@ -1,3 +1,4 @@
+#AWS config example
 aws_config = {
     "cloud": "aws",
     "k3s_role": "master",
@@ -8,4 +9,18 @@ aws_config = {
     "ami": "ami-0c0493bbac867d427",
     # "master_ip":"12.13.14.15",
     # "cluster_name":"elastic_mcnulty",
+}
+
+# openstack config example
+openstack_config = {
+    "cloud": "openstack",
+    "openstack_image_id": "6f44fc9-49ad-40e7-a4c1-f313fe413ac9",
+    "openstack_flavor_id": "m2.small",
+    "ssh_key_name": "test",
+    "openstack_size": "10", #in GB
+    "k3s_token": "testtoken",
+    "k3s_role": "master",
+    "ha": False,
+    # "master_ip":"12.13.14.15",
+    # "cluster_name":"elastic_mcnulty"
 }
