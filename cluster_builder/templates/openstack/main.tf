@@ -6,7 +6,6 @@ variable "master_ip" {
   default = null
 }
 variable "openstack_size" {}
-variable "openstack_volume_type" {}
 variable "openstack_image_id" {}
 variable "openstack_flavor_id" {}
 variable "ssh_key_name" {}
@@ -27,7 +26,6 @@ data "openstack_networking_network_v2" "cluster_network" {
 resource "openstack_blockstorage_volume_v3" "root_volume" {
   name        = "${var.cluster_name}-${var.resource_name}-volume"
   size        = var.openstack_size
-  volume_type = var.openstack_volume_type
   image_id    = var.openstack_image_id
 }
 
