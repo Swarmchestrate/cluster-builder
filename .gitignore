@@ -1,4 +1,5 @@
 */templates/*/*.sh.tpl
+*/templates/*/*.sh
 test-out/
 output/
 config.py
