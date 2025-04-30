@@ -24,3 +24,18 @@ openstack_config = {
     # "master_ip":"12.13.14.15",
     # "cluster_name":"elastic_mcnulty"
 }
+
+# Edge config sample
+edge_config = {
+    "cloud": "edge",
+    "edge_device_ip": "10.0.0.1",
+    "ssh_user": "your_user",
+    "ssh_auth_method": "password",  # can be "password" or "key"
+    "ssh_password": "your_password",  # only used if ssh_auth_method == "password"
+    # "ssh_private_key": "/path/to/key.pem",  # only used if ssh_auth_method == "key"
+    "k3s_token": "testtoken",
+    "k3s_role": "worker",
+    "ha": False,
+    # "master_ip": "10.0.0.1",
+    # "cluster_name": "elastic_mcnulty", 
+  }
