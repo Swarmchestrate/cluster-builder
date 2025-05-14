@@ -11,9 +11,18 @@ variable "openstack_flavor_id" {}
 variable "ssh_key_name" {}
 variable "k3s_token" {}
 variable "cloud" {
-  default = null
+  default = "openstack"
 }
 variable "ha" {
+  default = null
+}
+variable "external_ip" {
+  default     = null
+}
+variable "ssh_user" {
+  default = "ubuntu"
+}
+variable "ssh_private_key_path" {
   default = null
 }
 
@@ -48,21 +57,38 @@ resource "openstack_compute_instance_v2" "k3s_node" {
     uuid = data.openstack_networking_network_v2.cluster_network.id
   }
 
-  user_data = templatefile(
-    "${path.module}/${var.k3s_role}_user_data.sh.tpl",
-    {
-      ha            = var.ha,
-      k3s_token     = var.k3s_token,
-      master_ip     = var.master_ip,
-      cluster_name  = var.cluster_name
-    }
-  )
-
    tags = [
     "${var.cluster_name}-${var.resource_name}",
     "ClusterName=${var.cluster_name}",
     "Role=${var.k3s_role}"
   ]
+
+  # Upload the rendered user data script to the VM
+  provisioner "file" {
+    content = templatefile("${path.module}/${var.k3s_role}_user_data.sh.tpl", {
+      ha           = var.ha,
+      k3s_token    = var.k3s_token,
+      master_ip    = var.master_ip,
+      cluster_name = var.cluster_name,
+      external_ip = var.external_ip
+    })
+    destination = "/tmp/k3s_user_data.sh"
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "chmod +x /tmp/k3s_user_data.sh",
+      "sudo /tmp/k3s_user_data.sh"
+    ]
+  }
+
+  connection {
+    type        = "ssh"
+    user        = var.ssh_user
+    private_key = file(var.ssh_private_key_path)
+    host        = var.external_ip
+  }
+
 }
 
 # Define a local variable for the security group rules

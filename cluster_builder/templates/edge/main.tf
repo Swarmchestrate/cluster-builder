@@ -3,7 +3,7 @@ variable "cluster_name" {}
 variable "edge_device_ip" {}
 variable "k3s_token" {}
 variable "cloud" {
-  default = null
+  default = "edge"
 }
 variable "k3s_role" {}
 variable "resource_name" {}
@@ -28,6 +28,8 @@ data "template_file" "user_data" {
   vars = {
     k3s_token = var.k3s_token
     ha        = var.ha
+    external_ip = var.edge_device_ip
+    master_ip = var.master_ip
   }
 }
 
@@ -62,5 +64,6 @@ resource "null_resource" "deploy_k3s_edge" {
     cluster_name  = var.cluster_name
     role          = var.k3s_role
     resource_name = var.resource_name
+    edge_ip       = var.edge_device_ip
   }
 }

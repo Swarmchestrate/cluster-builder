@@ -7,11 +7,19 @@ variable "master_ip" {
 }
 variable "ami" {}
 variable "instance_type" {}
+variable "ssh_user" {}
 variable "ssh_key_name" {}
 variable "k3s_token" {}
-variable "cloud" {
+variable "ssh_private_key_path" {
   default = null
 }
+variable "cloud" {
+  default = "aws"
+}
+variable "external_ip" {
+  default = ""
+}
+
 variable "ha" {
   default = null
 }
@@ -26,23 +34,38 @@ resource "aws_instance" "k3s_node" {
     aws_security_group.k3s_sg.id
   ]
 
-  user_data = templatefile(
-    "${path.module}/${var.k3s_role}_user_data.sh.tpl",
-    {
-      ha            = var.ha,
-      k3s_token     = var.k3s_token,
-      master_ip     = var.master_ip,
-      cluster_name  = var.cluster_name
-    }
-  )
-
   tags = {
     Name        = "${var.cluster_name}-${var.resource_name}"
     ClusterName = var.cluster_name
     Role        = var.k3s_role
   }
-}
 
+  # Upload the rendered user data script to the VM
+  provisioner "file" {
+    content = templatefile("${path.module}/${var.k3s_role}_user_data.sh.tpl", {
+      ha           = var.ha,
+      k3s_token    = var.k3s_token,
+      master_ip    = var.master_ip,
+      cluster_name = var.cluster_name,
+      external_ip  = self.public_ip
+    })
+    destination = "/tmp/k3s_user_data.sh"
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "chmod +x /tmp/k3s_user_data.sh",
+      "sudo /tmp/k3s_user_data.sh"
+    ]
+  }
+
+  connection {
+    type        = "ssh"
+    user        = var.ssh_user
+    private_key = file(var.ssh_private_key_path)
+    host        = self.public_ip
+  }
+}
 resource "aws_security_group" "k3s_sg" {
   name        = "${var.k3s_role}-${var.cluster_name}-${var.resource_name}"
   description = "Security group for K3s node in cluster ${var.cluster_name}"
