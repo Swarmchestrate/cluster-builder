@@ -112,7 +112,9 @@ config = {
     "ami": "ami-0123456789abcdef",
     "instance_type": "t3.medium",
     "ssh_key_name": "your-ssh-key",
-    "k3s_token": "your-k3s-token"
+    "k3s_token": "your-k3s-token",
+    "ssh_user": "your_user",  # SSH user for the node
+    "ssh_private_key_path": "/path/to/key.pem"  # Path to your SSH private key
 }
 
 # Create the cluster (returns the cluster name)
@@ -134,7 +136,9 @@ worker_config = {
     "ami": "ami-0123456789abcdef",
     "instance_type": "t2.medium",
     "ssh_key_name": "your-ssh-key",
-    "k3s_token": "k3s-cluster-token" # Token of existing cluster
+    "k3s_token": "k3s-cluster-token" # Token of existing cluster,
+    "ssh_user": "your_user",  # SSH user for the node
+    "ssh_private_key_path": "/path/to/key.pem"  # Path to your SSH private key
 }
 
 # Add the worker node
@@ -145,6 +149,12 @@ print(f"Added worker node to cluster: {cluster_name}")
 Important requirements:
 - For `k3s_role="worker"` or `k3s_role="ha"`, you must specify a `master_ip`
 - For `k3s_role="master"`, you must not specify a `master_ip`
+- For `k3s_role="master"`, `k3s_role="worker"`, and `k3s_role="ha"`, you must specify `ssh_user` and `ssh_private_key_path`.
+
+Note: 
+-The `ssh_private_key_path` should be the path to your SSH private key file. Ensure that the SSH key is copied to the specified path before running the script. The `ssh_key_name` and the `ssh_private_key_path` are different, so you need to manually place your SSH key in the location provided.
+
+-For `OpenStack` once the instance is up, you need to manually attach the floating IP to the instance. Update the `external_ip` parameter with the floating IP address before running the deployment script.
 
 ### Removing a Specific Node
 
@@ -176,6 +186,9 @@ orchestrator.destroy(
 The `destroy` method:
 1. Destroys all infrastructure resources associated with the cluster
 2. Removes the cluster directory and configuration files
+
+Note for `Edge Devices`:
+Since the edge device is already provisioned, the `destroy` method will not remove K3s directly from the edge device. You will need to manually uninstall K3s from your edge device after the cluster is destroyed.
 
 ## Advanced Usage
 

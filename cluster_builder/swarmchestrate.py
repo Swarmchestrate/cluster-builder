@@ -146,8 +146,11 @@ class Swarmchestrate:
                 )
 
             # Create provider configuration
-            self.template_manager.create_provider_config(cluster_dir, cloud)
-            logger.info(f"Created provider configuration for {cloud}")
+            if cloud!= "edge" :
+                self.template_manager.create_provider_config(cluster_dir, cloud)
+                logger.info(f"Created provider configuration for {cloud}")
+            else:
+                logger.info("Skipping provider configuration for edge.")
 
             # Create Terraform files
             main_tf_path = os.path.join(cluster_dir, "main.tf")
