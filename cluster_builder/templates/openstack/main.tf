@@ -1,4 +1,10 @@
 # variables.tf
+# Determine whether to use block device
+variable "use_block_device" {
+  description = "Whether to use block storage volume as root device"
+  type        = bool
+  default     = false
+}
 variable "cluster_name" {}
 variable "resource_name" {}
 variable "k3s_role" {}
@@ -16,8 +22,10 @@ variable "cloud" {
 variable "ha" {
   default = null
 }
-variable "external_ip" {
-  default     = null
+
+variable "network_id" {
+  description = "The ID of the internal network to attach the instance to"
+  type        = string
 }
 variable "ssh_user" {
   default = "ubuntu"
@@ -45,16 +53,20 @@ resource "openstack_compute_instance_v2" "k3s_node" {
   key_pair        = var.ssh_key_name
   security_groups = [openstack_networking_secgroup_v2.k3s_sg.id]
 
-  block_device {
-    uuid                  = openstack_blockstorage_volume_v3.root_volume.id
-    source_type           = "volume"
-    destination_type      = "volume"
-    boot_index            = 0
-    delete_on_termination = true
+
+  dynamic "block_device" {
+    for_each = var.use_block_device ? [1] : []
+      content {
+        uuid                  = openstack_blockstorage_volume_v3.root_volume[0].id
+        source_type           = "volume"
+        destination_type      = "volume"
+        boot_index            = 0
+        delete_on_termination = true
+    }
   }
 
   network {
-    uuid = data.openstack_networking_network_v2.cluster_network.id
+    uuid = var.network.id
   }
 
    tags = [
@@ -62,15 +74,30 @@ resource "openstack_compute_instance_v2" "k3s_node" {
     "ClusterName=${var.cluster_name}",
     "Role=${var.k3s_role}"
   ]
+}
 
-  # Upload the rendered user data script to the VM
+# Floating IP allocation
+resource "openstack_networking_floatingip_v2" "fip" {
+  pool = var.external_network_name
+}
+
+# Associate Floating IP with the instance
+resource "openstack_compute_floatingip_associate_v2" "fip_assoc" {
+  floating_ip = openstack_networking_floatingip_v2.fip.address
+  instance_id = openstack_compute_instance_v2.k3s_node.id
+}
+
+# Provisioning via SSH
+resource "null_resource" "k3s_provision" {
+  depends_on = [openstack_compute_floatingip_associate_v2.fip_assoc]
+
   provisioner "file" {
     content = templatefile("${path.module}/${var.k3s_role}_user_data.sh.tpl", {
       ha           = var.ha,
       k3s_token    = var.k3s_token,
       master_ip    = var.master_ip,
       cluster_name = var.cluster_name,
-      external_ip = var.external_ip
+      public_ip = openstack_networking_floatingip_v2.fip.address
     })
     destination = "/tmp/k3s_user_data.sh"
   }
@@ -86,7 +113,7 @@ resource "openstack_compute_instance_v2" "k3s_node" {
     type        = "ssh"
     user        = var.ssh_user
     private_key = file(var.ssh_private_key_path)
-    host        = var.external_ip
+    host        = openstack_networking_floatingip_v2.fip.address
   }
 
 }
