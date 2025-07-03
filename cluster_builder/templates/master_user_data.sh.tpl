@@ -11,17 +11,16 @@ if systemctl is-active --quiet k3s; then
     exit 0
 fi
 
-# Use external IP passed from Terraform
-external_ip="${external_ip}"
-echo "Using external IP provided: ${external_ip}"
+# Use the provided public IP
+echo "Using provided public IP: ${public_ip}"
 
 # Templated installation based on HA configuration
 %{ if ha != null && ha }
 echo "$(date) - Installing in HA mode using cluster-init..."
-curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--cluster-init --node-external-ip=${external_ip} --flannel-backend=wireguard-native --flannel-external-ip" K3S_TOKEN="${k3s_token}" sh -s - server
+curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--cluster-init --node-external-ip=${public_ip} --flannel-backend=wireguard-native --flannel-external-ip" K3S_TOKEN="${k3s_token}" sh -s - server
 %{ else }
 echo "$(date) - Installing in single-server mode..."
-curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--node-external-ip=${external_ip} --flannel-backend=wireguard-native --flannel-external-ip" K3S_TOKEN="${k3s_token}" sh -s - server
+curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--node-external-ip=${public_ip} --flannel-backend=wireguard-native --flannel-external-ip" K3S_TOKEN="${k3s_token}" sh -s - server
 %{ endif }
 
 echo "=== Script completed at $(date) ==="

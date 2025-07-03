@@ -28,7 +28,7 @@ data "template_file" "user_data" {
   vars = {
     k3s_token = var.k3s_token
     ha        = var.ha
-    external_ip = var.edge_device_ip
+    public_ip = var.edge_device_ip
     master_ip = var.master_ip
   }
 }
