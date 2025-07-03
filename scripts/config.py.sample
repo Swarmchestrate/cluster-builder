@@ -23,7 +23,6 @@ openstack_config = {
     "k3s_token": "testtoken",
     "k3s_role": "master",
     "ha": False,
-    "external_ip": "10.0.0.1", # floating IP
     "ssh_user": "your_user",
     "ssh_private_key_path": "/path/to/key.pem",
     # "master_ip":"12.13.14.15",
