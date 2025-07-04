@@ -25,6 +25,8 @@ openstack_config = {
     "ha": False,
     "ssh_user": "your_user",
     "ssh_private_key_path": "/path/to/key.pem",
+    "network_name": "public_net",
+    "network_id": "a1916885-1aa1-4f72-a7dd-b8e36f155bb7",
     # "master_ip":"12.13.14.15",
     # "cluster_name":"elastic_mcnulty"
 }

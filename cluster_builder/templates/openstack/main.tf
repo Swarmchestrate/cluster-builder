@@ -22,10 +22,9 @@ variable "cloud" {
 variable "ha" {
   default = null
 }
-
 variable "network_id" {
-  description = "The ID of the internal network to attach the instance to"
-  type        = string
+}
+variable "network_name" {
 }
 variable "ssh_user" {
   default = "ubuntu"
@@ -36,11 +35,12 @@ variable "ssh_private_key_path" {
 
 # Network common to all nodes
 data "openstack_networking_network_v2" "cluster_network" {
-  name = "default"
+  name = var.network_name
 }
 
 # Block storage for each node role
 resource "openstack_blockstorage_volume_v3" "root_volume" {
+  count       = var.use_block_device ? 1 : 0  # Only create the volume if block device is required
   name        = "${var.cluster_name}-${var.resource_name}-volume"
   size        = var.openstack_size
   image_id    = var.openstack_image_id
@@ -49,47 +49,48 @@ resource "openstack_blockstorage_volume_v3" "root_volume" {
 # Compute instance for each role
 resource "openstack_compute_instance_v2" "k3s_node" {
   name             = "${var.cluster_name}-${var.resource_name}"
-  flavor_name       = var.openstack_flavor_id
-  key_pair        = var.ssh_key_name
-  security_groups = [openstack_networking_secgroup_v2.k3s_sg.id]
+  flavor_name      = var.openstack_flavor_id
+  key_pair         = var.ssh_key_name
+  security_groups  = [openstack_networking_secgroup_v2.k3s_sg.id]
 
+  # Only add the image_id if block device is NOT used
+  image_id = var.use_block_device ? null : var.openstack_image_id
 
+  # Conditional block_device for boot volume
   dynamic "block_device" {
-    for_each = var.use_block_device ? [1] : []
-      content {
-        uuid                  = openstack_blockstorage_volume_v3.root_volume[0].id
-        source_type           = "volume"
-        destination_type      = "volume"
-        boot_index            = 0
-        delete_on_termination = true
+    for_each = var.use_block_device ? [1] : []  # Include block_device only if use_block_device is true
+    content {
+      uuid                  = openstack_blockstorage_volume_v3.root_volume[0].id
+      source_type           = "volume"
+      destination_type      = "volume"
+      boot_index            = 0
+      delete_on_termination = true
     }
   }
 
   network {
-    uuid = var.network.id
+    uuid = var.network_id
   }
 
-   tags = [
+  tags = [
     "${var.cluster_name}-${var.resource_name}",
     "ClusterName=${var.cluster_name}",
     "Role=${var.k3s_role}"
   ]
 }
 
-# Floating IP allocation
-resource "openstack_networking_floatingip_v2" "fip" {
-  pool = var.external_network_name
+resource "openstack_networking_port_v2" "port_1" {
+  network_id = var.network_id
 }
 
-# Associate Floating IP with the instance
-resource "openstack_compute_floatingip_associate_v2" "fip_assoc" {
-  floating_ip = openstack_networking_floatingip_v2.fip.address
-  instance_id = openstack_compute_instance_v2.k3s_node.id
+# Create a floating IP
+resource "openstack_networking_floatingip_v2" "fip" {
+  pool = var.network_name  # Replace with your actual floating IP pool if needed
 }
 
 # Provisioning via SSH
 resource "null_resource" "k3s_provision" {
-  depends_on = [openstack_compute_floatingip_associate_v2.fip_assoc]
+  depends_on = [openstack_networking_floatingip_v2.fip]
 
   provisioner "file" {
     content = templatefile("${path.module}/${var.k3s_role}_user_data.sh.tpl", {
