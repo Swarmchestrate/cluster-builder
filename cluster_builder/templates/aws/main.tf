@@ -99,6 +99,7 @@ resource "aws_instance" "k3s_node" {
 
   provisioner "remote-exec" {
     inline = [
+      "rm -f ~/.ssh/known_hosts",
       "echo 'Executing remote provisioning script on ${var.k3s_role} node'",
       "chmod +x /tmp/k3s_user_data.sh",
       "sudo /tmp/k3s_user_data.sh"

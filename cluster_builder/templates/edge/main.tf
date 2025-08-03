@@ -54,6 +54,8 @@ resource "null_resource" "deploy_k3s_edge" {
 
    provisioner "remote-exec" {
     inline = [
+      "rm -f ~/.ssh/known_hosts",
+      "echo 'Executing remote provisioning script on ${var.k3s_role} node'",
       "chmod +x /tmp/edge_user_data.sh",
       "sudo /tmp/edge_user_data.sh"
     ]
