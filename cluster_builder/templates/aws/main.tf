@@ -2,7 +2,9 @@
 variable "cluster_name" {}
 variable "resource_name" {}
 variable "k3s_role" {}
-variable "master_ip" {}
+variable "master_ip" {
+  default = null
+}
 variable "ami" {}
 variable "instance_type" {}
 variable "ssh_user" {}
@@ -23,14 +25,10 @@ variable "udp_ports" {
   default = []
 }
 
-# main.tf
-resource "aws_security_group" "k3s_sg" {
-  count       = var.security_group_id == "" ? 1 : 0
-  name        = "${var.k3s_role}-${var.cluster_name}-${var.resource_name}"
-  description = "Security group for K3s node in cluster ${var.cluster_name}"
-
-  dynamic "ingress" {
-    for_each = toset([
+#main.tf
+locals {
+  ingress_rules = var.security_group_id == "" ? concat(
+    [
       { from = 2379, to = 2380, proto = "tcp", desc = "etcd communication", roles = ["master", "ha"] },
       { from = 6443, to = 6443, proto = "tcp", desc = "K3s API server", roles = ["master", "ha", "worker"] },
       { from = 8472, to = 8472, proto = "udp", desc = "VXLAN for Flannel", roles = ["master", "ha", "worker"] },
@@ -43,21 +41,34 @@ resource "aws_security_group" "k3s_sg" {
       { from = 443, to = 443, proto = "tcp", desc = "HTTPS access", roles = ["master", "ha", "worker"] },
       { from = 53, to = 53, proto = "udp", desc = "DNS for CoreDNS", roles = ["master", "ha", "worker"] },
       { from = 5432, to = 5432, proto = "tcp", desc = "PostgreSQL access", roles = ["master"] }
-    ] ++ [
-      for port in var.tcp_ports :
-        { from = port, to = port, proto = "tcp", desc = "Custom TCP rule for port ${port}", roles = ["master", "ha", "worker"] }
-    ] ++ [
-      for port in var.udp_ports :
-        { from = port, to = port, proto = "udp", desc = "Custom UDP rule for port ${port}", roles = ["master", "ha", "worker"] }
-    ])
-    content {
-      from_port   = ingress.value.from
-      to_port     = ingress.value.to
-      protocol    = ingress.value.proto
-      cidr_blocks = ["0.0.0.0/0"]
-      description = ingress.value.desc
-    }
+    ],
+    [
+      for port in var.tcp_ports : {
+        from = port, to = port, proto = "tcp", desc = "Custom TCP rule for port ${port}", roles = ["master", "ha", "worker"]
+      }
+    ],
+    [
+      for port in var.udp_ports : {
+        from = port, to = port, proto = "udp", desc = "Custom UDP rule for port ${port}", roles = ["master", "ha", "worker"]
+      }
+    ]
+  ) : []
+}
+resource "aws_security_group" "k3s_sg" {
+  count       = var.security_group_id == "" ? 1 : 0
+  name        = "${var.k3s_role}-${var.cluster_name}-${var.resource_name}"
+  description = "Security group for K3s node in cluster ${var.cluster_name}"
+
+  dynamic "ingress" {
+  for_each = { for idx, rule in local.ingress_rules : idx => rule if contains(rule.roles, var.k3s_role) }
+  content {
+    from_port   = ingress.value.from
+    to_port     = ingress.value.to
+    protocol    = ingress.value.proto
+    cidr_blocks = ["0.0.0.0/0"]
+    description = ingress.value.desc
   }
+}
 
   egress {
     from_port   = 0
@@ -116,17 +127,25 @@ resource "aws_instance" "k3s_node" {
 
 # outputs.tf
 output "cluster_name" {
-  value = var.k3s_role == "master" ? var.cluster_name : null
+  value = var.cluster_name
 }
 
 output "master_ip" {
-  value = var.k3s_role == "master" ? aws_instance.k3s_node.public_ip : null
+  value = var.k3s_role == "master" ? aws_instance.k3s_node.public_ip : var.master_ip
+}
+
+output "worker_ip" {
+  value = var.k3s_role == "worker" ? aws_instance.k3s_node.public_ip : null
+}
+
+output "ha_ip" {
+  value = var.k3s_role == "ha" ? aws_instance.k3s_node.public_ip : null
 }
 
 output "k3s_token" {
-  value = var.k3s_role == "master" ? var.k3s_token : null
+  value = var.k3s_token
 }
 
 output "instance_status" {
-  value = aws_instance.k3s_node.state
+  value = aws_instance.k3s_node.id
 }

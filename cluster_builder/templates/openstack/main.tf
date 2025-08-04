@@ -2,7 +2,9 @@
 variable "cluster_name" {}
 variable "resource_name" {}
 variable "k3s_role" {}
-variable "master_ip" {}
+variable "master_ip" {
+  default = null
+}
 variable "volume_size" {}
 variable "openstack_image_id" {}
 variable "openstack_flavor_id" {}
@@ -46,7 +48,8 @@ resource "openstack_networking_port_v2" "port_1" {
 
 # Security group rules
 locals {
-  ingress_rules = var.security_group_id == "" ?  [
+  ingress_rules = var.security_group_id == "" ? concat(
+    [
     { from = 2379, to = 2380, proto = "tcp", desc = "etcd communication", roles = ["master", "ha"] },
     { from = 6443, to = 6443, proto = "tcp", desc = "K3s API server", roles = ["master", "ha", "worker"] },
     { from = 8472, to = 8472, proto = "udp", desc = "VXLAN for Flannel", roles = ["master", "ha", "worker"] },
@@ -59,13 +62,18 @@ locals {
     { from = 443, to = 443, proto = "tcp", desc = "HTTPS access", roles = ["master", "ha", "worker"] },
     { from = 53, to = 53, proto = "udp", desc = "DNS for CoreDNS", roles = ["master", "ha", "worker"] },
     { from = 5432, to = 5432, proto = "tcp", desc = "PostgreSQL access", roles = ["master"] }
-  ] ++ [
-    for port in var.tcp_ports : 
-    { from = port, to = port, proto = "tcp", desc = "Custom TCP rule for port ${port}", roles = ["master", "ha", "worker"] }
-  ] ++ [
-    for port in var.udp_ports : 
-    { from = port, to = port, proto = "udp", desc = "Custom UDP rule for port ${port}", roles = ["master", "ha", "worker"] }
-  ] : []
+  ],
+    [
+      for port in var.tcp_ports : {
+        from = port, to = port, proto = "tcp", desc = "Custom TCP rule for port ${port}", roles = ["master", "ha", "worker"]
+      }
+    ],
+    [
+      for port in var.udp_ports : {
+        from = port, to = port, proto = "udp", desc = "Custom UDP rule for port ${port}", roles = ["master", "ha", "worker"]
+      }
+    ]
+  ) : []
 }
 
 # Security Group Resource
@@ -164,7 +172,7 @@ resource "null_resource" "k3s_provision" {
 
   provisioner "remote-exec" {
     inline = [
-      "rm -f ~/.ssh/known_hosts"
+      "rm -f ~/.ssh/known_hosts",
       "echo 'Executing remote provisioning script on ${var.k3s_role} node'",
       "chmod +x /tmp/k3s_user_data.sh",
       "sudo /tmp/k3s_user_data.sh"
@@ -181,17 +189,25 @@ resource "null_resource" "k3s_provision" {
 
 # outputs.tf
 output "cluster_name" {
-  value = var.k3s_role == "master" ? var.cluster_name : null
+  value = var.cluster_name
 }
 
 output "master_ip" {
-  value = var.k3s_role == "master" ? openstack_compute_instance_v2.k3s_node.network.0.fixed_ip_v4 : null
+  value = var.k3s_role == "master" ? openstack_compute_instance_v2.k3s_node.network.0.fixed_ip_v4 : var.master_ip
+}
+
+output "worker_ip" {
+  value = var.k3s_role == "worker" ? openstack_compute_instance_v2.k3s_node.network.0.fixed_ip_v4 : null
+}
+
+output "ha_ip" {
+  value = var.k3s_role == "ha" ? openstack_compute_instance_v2.k3s_node.network.0.fixed_ip_v4 : null
 }
 
 output "k3s_token" {
   value = var.k3s_token
 }
 
-output "instance_status" {
-  value = openstack_compute_instance_v2.k3s_node.status
+output "instance_power_state" {
+  value = openstack_compute_instance_v2.k3s_node.power_state
 }

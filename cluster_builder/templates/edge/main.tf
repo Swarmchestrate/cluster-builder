@@ -14,13 +14,12 @@ variable "ssh_password" {
   default = null
 }
 variable "ssh_private_key" {
-  default = null
 }
 variable "master_ip" {
   default = null
 }
 variable "ha" {
-  default = null
+  default = false
 }
 
 data "template_file" "user_data" {
@@ -68,4 +67,25 @@ resource "null_resource" "deploy_k3s_edge" {
     resource_name = var.resource_name
     edge_ip       = var.edge_device_ip
   }
+}
+
+# outputs.tf
+output "cluster_name" {
+  value = var.cluster_name
+}
+
+output "master_ip" {
+  value = var.k3s_role == "master" ? var.edge_device_ip : var.master_ip
+}
+
+output "worker_ip" {
+  value = var.k3s_role == "worker" ? var.edge_device_ip : null
+}
+
+output "ha_ip" {
+  value = var.k3s_role == "ha" ? var.edge_device_ip : null
+}
+
+output "k3s_token" {
+  value = var.k3s_token
 }
