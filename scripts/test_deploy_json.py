@@ -1,12 +1,12 @@
 import json
 from cluster_builder import Swarmchestrate
 
-# Load JSON config from file
-with open("node_config.json", "r") as f:
-    json_config = json.load(f)
+with open("scripts/node_config.json", "r") as f:
+    config = json.load(f)
 
-# Create Swarmchestrate instance
+nodes = config.get("nodes", [])
 swarmchestrate = Swarmchestrate(template_dir="templates", output_dir="output")
 
-# Add node
-swarmchestrate.add_node(json_config)
+for node in nodes:
+    print(f"[INFO] Provisioning {node['k3s_role']} node on {node['cloud']}")
+    swarmchestrate.add_node(node)
