@@ -1,3 +1,4 @@
+import json
 import os
 import hcl2
 from lark import Tree, Token
@@ -60,6 +61,8 @@ def add_module_block(main_tf_path, module_name, config):
             v_str = "true" if v else "false"
         elif isinstance(v, (int, float)):
             v_str = str(v)
+        elif isinstance(v, (list, dict)):
+            v_str = json.dumps(v)
         elif v is None:
             continue
         else:
@@ -229,3 +232,32 @@ def extract_template_variables(template_path):
         error_msg = f"Failed to extract variables from {template_path}: {e}"
         print(f"Error: {error_msg}")
         raise ValueError(error_msg)
+
+def add_output_blocks(outputs_tf_path, module_name, output_names):
+    import os
+
+    existing_text = ""
+    if os.path.exists(outputs_tf_path):
+        with open(outputs_tf_path, "r") as f:
+            existing_text = f.read()
+
+    lines_to_add = []
+    for output_name in output_names:
+        if f'output "{output_name}"' in existing_text:
+            print(f"⚠️ Output '{output_name}' already exists, skipping.")
+            continue
+        block = f'''
+output "{output_name}" {{
+  value = module.{module_name}.{output_name}
+}}
+'''.strip()
+        lines_to_add.append(block)
+
+    if not lines_to_add:
+        print(f"⚠️ No new outputs to add in {outputs_tf_path}.")
+        return
+
+    with open(outputs_tf_path, "a") as f:
+        f.write("\n\n" + "\n\n".join(lines_to_add) + "\n")
+
+    print(f"✅ Added outputs for module '{module_name}' in {outputs_tf_path}")
