@@ -2,9 +2,11 @@
 Swarmchestrate - Main orchestration class for K3s cluster management.
 """
 
+import json
 import os
 import logging
 import shutil
+import subprocess
 from typing import Optional
 
 from dotenv import load_dotenv
@@ -179,7 +181,7 @@ class Swarmchestrate:
             logger.error(error_msg)
             raise RuntimeError(error_msg)
 
-    def add_node(self, config: dict[str, any], dryrun: bool = False) -> str:
+    def add_node(self, config: dict[str, any], dryrun: bool = False) -> dict:
         """
         Add a node to an existing cluster or create a new cluster based on configuration.
 
@@ -201,6 +203,13 @@ class Swarmchestrate:
         # Prepare the infrastructure configuration
         cluster_dir, prepared_config = self.prepare_infrastructure(config)
 
+         # Add output blocks for the module you just added
+        module_name = prepared_config["resource_name"]  # Assuming this is your module name
+        outputs_file = os.path.join(cluster_dir, "outputs.tf")
+        output_names = ["cluster_name", "master_ip", "k3s_token", "instance_status"]
+
+        hcl.add_output_blocks(outputs_file, module_name, output_names)
+
         logger.info(f"Adding node for cluster '{prepared_config['cluster_name']}'")
 
         # Deploy the infrastructure
@@ -211,11 +220,37 @@ class Swarmchestrate:
             logger.info(
                 f"Successfully added '{node_name}' for cluster '{cluster_name}'"
             )
-            return cluster_name
+            # Run 'tofu output -json' to get outputs
+            result = subprocess.run(
+                ["tofu", "output", "-json"],
+                cwd=cluster_dir,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=True,
+            )
+            outputs = json.loads(result.stdout)
+
+            cluster_name_output = outputs.get("cluster_name", {}).get("value")
+            master_ip = outputs.get("master_ip", {}).get("value")
+
+            logger.info(f"Terraform outputs - cluster_name: {cluster_name_output}, master_ip: {master_ip}")
+
+            return {
+                "cluster_name": cluster_name_output or cluster_name,
+                "master_ip": master_ip,
+            }
+
+        except subprocess.CalledProcessError as e:
+            error_msg = f"Failed to get outputs: {e.stderr.strip()}"
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
+        
         except Exception as e:
             error_msg = f"Failed to add node: {e}"
             logger.error(error_msg)
             raise RuntimeError(error_msg)
+
 
     def remove_node(
         self, cluster_name: str, resource_name: str, dryrun: bool = False
