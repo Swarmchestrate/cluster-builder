@@ -1,6 +1,4 @@
 
----
-```markdown
 # Edge Device Requirements for Swarmchestrate
 
 To integrate edge devices as part of your K3s cluster, ensure that the following **ports** are open on each edge device to enable communication within nodes:
