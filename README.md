@@ -21,6 +21,8 @@ Before proceeding, ensure the following prerequisites are installed:
 6. **Make**: To run the provided `Makefile`.
 7. **PostgreSQL**: For storing OpenTofu state.
 8. (Optional) **Docker**: To create a dev Postgres
+9. For detailed instructions on **edge device requirements**, refer to the [Edge Device Requirements](docs/edge-requirements.md) document.
+
 ---
 
 ## Getting Started
@@ -51,8 +53,6 @@ This command will:
 - Install Python dependencies listed in requirements.txt.
 - Download and configure OpenTofu for infrastructure management.
 
-**Optional**
-
 ```bash
  make db
 ```
@@ -60,17 +60,22 @@ This command will:
 This command will:
 - Spin up an empty dev Postgres DB (in Docker) for storing state
 
-### 4. Populate .env file with access config
+in ths makefile database details are provide you update or use that ones name pg-db -e POSTGRES_USER=admin -e POSTGRES_PASSWORD=adminpass -e POSTGRES_DB=swarmchestrate
 
-First, rename or copy the example file to `.env`
+For database setup as a service, refer to the [database setup as service](docs/database_setup.md) document
+
+### 4. Populate .env file with access config
+The .env file is used to store environment variables required by the application. It contains configuration details for connecting to your cloud providers, the PostgreSQL database, and any other necessary resources.
+
+#### 1.  Rename or copy the example file to **.env**
 
 ```bash
 cp .env_example .env
 ```
 
-Then populate postgres connection details and needed cloud credential data.
+#### 2. Open the **.env** file and add the necessary configuration for your cloud providers and PostgreSQL:
 
-```
+```ini
 ## PG Configuration
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=secret
@@ -79,9 +84,25 @@ POSTGRES_DATABASE=terraform_state
 POSTGRES_SSLMODE=prefer
 
 ## AWS Auth
-AWS_REGION=us-west-2
-AWS_ACCESS_KEY=AKIAXXXXXXXXXXXXXXXX
-AWS_SECRET_KEY=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+TF_VAR_aws_region=us-west-2
+TF_VAR_aws_access_key=AKIAXXXXXXXXXXXXXXXX
+TF_VAR_aws_secret_key=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+
+## OpenStack Auth - AppCreds Mode
+TF_VAR_openstack_auth_method=appcreds
+TF_VAR_openstack_auth_url=https://openstack.example.com:5000
+TF_VAR_openstack_application_credential_id=fdXXXXXXXXXXXXXXXX
+TF_VAR_openstack_application_credential_secret=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+TF_VAR_openstack_region=RegionOne
+
+## OpenStack Auth - User/Pass Mode
+# TF_VAR_openstack_auth_method=userpass
+# TF_VAR_openstack_auth_url=https://openstack.example.com:5000
+# TF_VAR_openstack_region=RegionOne
+# TF_VAR_openstack_user_name=myuser
+# TF_VAR_openstack_password=mypassword
+# TF_VAR_openstack_project_id=project-id-123
+# TF_VAR_openstack_user_domain_name=Default
 ```
 
 ---
@@ -102,19 +123,21 @@ orchestrator = Swarmchestrate(
 
 ### Creating a New Cluster
 
-To create a new k3s cluster, use the `add_node` method with the `master` role:
+To create a new k3s cluster, use the **add_node** method with the **master** role:
 
 ```python
 # Configuration for a new cluster
 config = {
-    "cloud": "aws",
-    "k3s_role": "master",
-    "ami": "ami-0123456789abcdef",
-    "instance_type": "t3.medium",
-    "ssh_key_name": "your-ssh-key",
-    "k3s_token": "your-k3s-token",
-    "ssh_user": "your_user",  # SSH user for the node
-    "ssh_private_key_path": "/path/to/key.pem"  # Path to your SSH private key
+    "cloud": "aws",  # Can be 'aws', 'openstack', or 'edge'
+    "k3s_role": "master",  # Role can be 'master', 'worker', or 'ha'
+    "ha": False,  # Set to True for high availability (HA) deployments
+    "instance_type": "t2.small",  # AWS instance type
+    "ssh_key_name": "g",  # SSH key name for AWS or OpenStack
+    "ssh_user": "ec2-user",  # SSH user for the instance
+    "ssh_private_key_path": "/workspaces/cluster-builder/scripts/g.pem",  # Path to SSH private key
+    "ami": "ami-0c0493bbac867d427",  # AMI ID for AWS (specific to region)
+    "tcp_ports": [10020],  # Optional list of TCP ports to open
+    "udp_ports": [1003]  # Optional list of UDP ports to open
 }
 
 # Create the cluster (returns the cluster name)
@@ -129,32 +152,26 @@ To add worker or high-availability nodes to an existing cluster:
 ```python
 # Configuration for adding a worker node
 worker_config = {
-    "cloud": "aws",
-    "k3s_role": "worker",  # can be "worker" or "ha"
-    "master_ip": "1.2.3.4",  # IP of the master node
-    "cluster_name": "existing-cluster-name",  # specify an existing cluster
-    "ami": "ami-0123456789abcdef",
-    "instance_type": "t2.medium",
-    "ssh_key_name": "your-ssh-key",
-    "k3s_token": "k3s-cluster-token" # Token of existing cluster,
-    "ssh_user": "your_user",  # SSH user for the node
-    "ssh_private_key_path": "/path/to/key.pem"  # Path to your SSH private key
+    "cloud": "aws",  # Cloud provider (can be 'aws', 'openstack', or 'edge')
+    "k3s_role": "worker",  # Role can be 'worker' or 'ha'
+    "ha": False,  # Set to True for high availability (HA) deployments
+    "instance_type": "t2.small",  # AWS instance type
+    "ssh_key_name": "g",  # SSH key name
+    "ssh_user": "ec2-user",  # SSH user for the instance
+    "ssh_private_key_path": "/workspaces/cluster-builder/scripts/g.pem",  # Path to SSH private key
+    "ami": "ami-0c0493bbac867d427",  # AMI ID for AWS
+    # Optional parameters:
+    # "master_ip": "12.13.14.15",  # IP address of the master node (required for worker/HA roles)
+    # "cluster_name": "elastic_mcnulty",  # Name of the cluster
+    # "security_group_id": "sg-xxxxxxxxxxxxxxx",  # Security group ID for AWS or OpenStack
+    # "tcp_ports": [80, 443],  # List of TCP ports to open
+    # "udp_ports": [53]  # List of UDP ports to open
 }
 
 # Add the worker node
 cluster_name = orchestrator.add_node(worker_config)
 print(f"Added worker node to cluster: {cluster_name}")
 ```
-
-Important requirements:
-- For `k3s_role="worker"` or `k3s_role="ha"`, you must specify a `master_ip`
-- For `k3s_role="master"`, you must not specify a `master_ip`
-- For `k3s_role="master"`, `k3s_role="worker"`, and `k3s_role="ha"`, you must specify `ssh_user` and `ssh_private_key_path`.
-
-Note: 
--The `ssh_private_key_path` should be the path to your SSH private key file. Ensure that the SSH key is copied to the specified path before running the script. The `ssh_key_name` and the `ssh_private_key_path` are different, so you need to manually place your SSH key in the location provided.
-
--For `OpenStack` once the instance is up, you need to manually attach the floating IP to the instance. Update the `external_ip` parameter with the floating IP address before running the deployment script.
 
 ### Removing a Specific Node
 
@@ -168,7 +185,7 @@ orchestrator.remove_node(
 )
 ```
 
-The `remove_node` method:
+The **remove_node** method:
 1. Destroys the node's infrastructure resources
 2. Removes the node's configuration from the cluster
 
@@ -183,18 +200,59 @@ orchestrator.destroy(
 )
 ```
 
-The `destroy` method:
+The **destroy** method:
 1. Destroys all infrastructure resources associated with the cluster
 2. Removes the cluster directory and configuration files
 
-Note for `Edge Devices`:
+Note for **Edge Devices**:
 Since the edge device is already provisioned, the `destroy` method will not remove K3s directly from the edge device. You will need to manually uninstall K3s from your edge device after the cluster is destroyed.
+
+### Important Configuration Requirements
+#### High Availability Flag (ha):
+
+For k3s_role="worker" or k3s_role="ha", you must specify a master_ip (the IP address of the master node).
+
+For k3s_role="master", you must not specify a master_ip.
+
+The ha flag should be set to True for high availability deployment (usually when adding a ha or worker node to an existing master).
+
+#### SSH Credentials:
+
+For all roles (k3s_role="master", k3s_role="worker", k3s_role="ha"), you must specify both ssh_user and ssh_private_key_path except for edge.
+
+The ssh_private_key_path should be the path to your SSH private key file. Ensure that the SSH key is copied to the specified path before running the script.
+
+The ssh_key_name and the ssh_private_key_path are different—ensure that your SSH key is placed correctly at the provided ssh_private_key_path.
+
+#### Ports:
+You can specify custom ports for your nodes in the tcp_ports and udp_ports fields. However, certain ports are required for Kubernetes deployment (even if not specified explicitly):
+
+**TCP Ports:**
+
+2379-2380: For etcd communication
+6443: K3s API server
+10250: Kubelet metrics
+51820-51821: WireGuard (for encrypted networking)
+22: SSH access
+80, 443: HTTP/HTTPS access
+53: DNS (CoreDNS)
+5432: PostgreSQL access (master node)
+
+**UDP Ports:**
+
+8472: VXLAN for Flannel
+53: DNS
+
+#### OpenStack:
+When provisioning on OpenStack, you should provide the value for 'floating_ip_pool' from which floating IPs can be allocated for the instance. If not specified, OpenTofu will not assign floating IP.
+
+---
 
 ## Advanced Usage
 
 ### Dry Run Mode
 
-All operations support a `dryrun` parameter, which validates the configuration 
+All operations support a **dryrun** parameter, which validates the configuration 
 without making changes. A node created with dryrun should be removed with dryrun.
 
 ```python
@@ -235,29 +293,9 @@ Templates should be organised as follows:
 
 ---
 
-## Edge Device Requirements
+## DEMO
+Some test scripts have been created for demonstrating the functionality of the cluster builder. These scripts can be referred to for understanding how the system works and for testing various configurations.
 
-To connect **edge devices** as part of your K3s cluster, ensure that the following **ports are open** on each edge device to enable communication within nodes:
+For detailed service deployment examples and to explore the test scripts, refer to the [test scripts](docs/test-scripts.md) document
 
-### Inbound Rules:
-
-| Port Range| Protocol| Purpose                                                     |
-|-----------|---------|-------------------------------------------------------------|
-| 2379-2380 | TCP     | Internal servers communication for embedded etcd            |
-| 6443      | TCP     | K3s API server communication                                |
-| 8472      | UDP     | Flannel VXLAN (network overlay)                             |
-| 10250     | TCP     | Kubelet metrics and communication                           |
-| 51820     | UDP     | WireGuard IPv4 (for encrypted networking)                   |
-| 51821     | UDP     | WireGuard IPv6 (for encrypted networking)                   |
-| 5001      | TCP     | Embedded registry (Spegel)                                  |
-| 22        | TCP     | SSH access for provisioning and management                  |
-| 80        | TCP     | HTTP communication for web access                           |
-| 443       | TCP     | HTTPS communication for secure access                       |
-| 53        | UDP     | DNS (CoreDNS) for internal service discovery                |
-| 5432      | TCP     | PostgreSQL database access                                  |
-
-### Outbound Rule:
-
-| Port Range| Protocol | Purpose                                                |
-|-----------|----------|--------------------------------------------------------|
-| all       | all      | Allow all outbound traffic for the system's operations |
+---
