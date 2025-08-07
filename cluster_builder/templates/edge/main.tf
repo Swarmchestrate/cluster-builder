@@ -22,6 +22,7 @@ variable "ha" {
   default = false
 }
 
+#main.tf
 data "template_file" "user_data" {
   template = file("${path.module}/${var.k3s_role}_user_data.sh.tpl")
   vars = {
@@ -67,6 +68,7 @@ resource "null_resource" "deploy_k3s_edge" {
     resource_name = var.resource_name
     edge_ip       = var.edge_device_ip
   }
+  depends_on = [local_file.rendered_user_data]
 }
 
 # outputs.tf
