@@ -3,6 +3,7 @@ import os
 import hcl2
 from lark import Tree, Token
 import logging
+import re
 
 logger = logging.getLogger("cluster_builder")
 def add_backend_config(backend_tf_path, conn_str, schema_name):
@@ -235,30 +236,52 @@ def extract_template_variables(template_path):
         raise ValueError(error_msg)
 
 def add_output_blocks(outputs_tf_path, module_name, output_names):
-    import os
-
     existing_text = ""
+    
+    # Read existing content if the file exists
     if os.path.exists(outputs_tf_path):
         with open(outputs_tf_path, "r") as f:
             existing_text = f.read()
 
     lines_to_add = []
+    updated_lines = []
+
+    # Check and add output blocks
     for output_name in output_names:
+        output_block = f'output "{output_name}" {{\n  value = module.{module_name}.{output_name}\n}}'.strip()
+
         if f'output "{output_name}"' in existing_text:
-            logger.warning("⚠️ Output '%s' already exists in %s, skipping.", output_name, outputs_tf_path)
+            # Check if the output block already exists in the file
+            logger.warning(f"⚠️ Output '{output_name}' already exists in {outputs_tf_path}. Checking if it needs an update.")
+            
+            # Only update if the value is None in the current output
+            if output_name in ["worker_ip", "ha_ip"] and "None" in existing_text:
+                updated_lines.append(output_block)
+            elif output_block not in existing_text:
+                # If it's there but not the same, we need to update it
+                updated_lines.append(output_block)
+            else:
+                logger.info(f"Output '{output_name}' is already correctly defined in {outputs_tf_path}.")
             continue
-        block = f'''
-output "{output_name}" {{
-  value = module.{module_name}.{output_name}
-}}
-'''.strip()
-        lines_to_add.append(block)
+        else:
+            # If the output doesn't exist, add it
+            lines_to_add.append(output_block)
 
-    if not lines_to_add:
-        logger.warning("⚠️ No new outputs to add in %s.", outputs_tf_path)
-        return
+    # Remove old output blocks before adding or updating new ones
+    if lines_to_add or updated_lines:
+        # Remove old output definitions for those outputs that will be replaced
+        for output_name in output_names:
+            existing_text = re.sub(
+                f'output "{output_name}".*?}}', '', existing_text, flags=re.DOTALL
+            )
 
-    with open(outputs_tf_path, "a") as f:
-        f.write("\n\n" + "\n\n".join(lines_to_add) + "\n")
+        # Combine all new output blocks and updates to add
+        final_output = "\n\n".join(lines_to_add + updated_lines)
 
-    logger.info("✅ Added outputs for module '%s' in %s", module_name, outputs_tf_path)
+        # Append new or updated blocks
+        with open(outputs_tf_path, "w") as f:
+            f.write(existing_text.strip() + "\n\n" + final_output + "\n")
+
+        logger.info(f"✅ Added/updated outputs for module '{module_name}' in {outputs_tf_path}")
+    else:
+        logger.warning(f"⚠️ No new outputs to add or update in {outputs_tf_path}.")
