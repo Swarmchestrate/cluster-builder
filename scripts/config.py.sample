@@ -44,9 +44,9 @@ edge_config = {
     "cloud": "edge",
     "edge_device_ip": "10.0.0.1",
     "ssh_user": "your_user",
-    "ssh_auth_method": "password",  # "password" or "key"
-    "ssh_password": "your_password",  # required if ssh_auth_method == "password"
-    # "ssh_private_key_path": "/path/to/key.pem",  # required if ssh_auth_method == "key"
+    "ssh_auth_method": "key",  # "password" or "key"
+    "ssh_private_key": "/path/to/key.pem",  # required if ssh_auth_method == "key"
+    # "ssh_password": "your_password",  # required if ssh_auth_method == "password"
     "k3s_token": "testtoken",
     "k3s_role": "worker",
     "ha": False,
