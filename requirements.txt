@@ -2,3 +2,4 @@ names_generator
 python-hcl2
 lark-parser
 dotenv
+psycopg2
