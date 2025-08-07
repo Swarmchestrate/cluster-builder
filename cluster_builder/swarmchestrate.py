@@ -420,6 +420,15 @@ class Swarmchestrate:
             return
 
         try:
+            # Run tofu init -upgrade to update the dependency lock file
+            logger.info("Running 'tofu init -upgrade' to update the lock file")
+            CommandExecutor.run_command(
+                ["tofu", "init", "-upgrade"], 
+                cluster_dir, 
+                "OpenTofu init -upgrade", 
+                timeout=30
+            )
+
             # Plan destruction
             CommandExecutor.run_command(
                 ["tofu", "plan", "-destroy", "-input=false"],
