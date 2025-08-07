@@ -1,14 +1,11 @@
 
 ---
-
-### `edge-requirements.md`** (Edge Device Requirements)
-
 ```markdown
 # Edge Device Requirements for Swarmchestrate
 
 To integrate edge devices as part of your K3s cluster, ensure that the following **ports** are open on each edge device to enable communication within nodes:
 
-### Inbound Rules:
+## Inbound Rules:
 
 | Port Range| Protocol| Purpose                                                     |
 |-----------|---------|-------------------------------------------------------------|
@@ -25,14 +22,20 @@ To integrate edge devices as part of your K3s cluster, ensure that the following
 | 53        | UDP     | DNS (CoreDNS) for internal service discovery                |
 | 5432      | TCP     | PostgreSQL database access                                  |
 
-### Outbound Rule:
+---
+
+## Outbound Rule:
 
 | Port Range| Protocol | Purpose                                                |
 |-----------|----------|--------------------------------------------------------|
 | all       | all      | Allow all outbound traffic for the system's operations |
 
-### Edge Device Assumptions:
+---
+
+## Edge Device Assumptions:
 - The firewall rules are assumed to be open for the required ports on the edge device.
 - You can authenticate using either an SSH key pair or an SSH password.
   - If you use SSH keys, specify the `ssh_private_key` path.
   - If you use a password, specify `ssh_password` instead.
+
+---

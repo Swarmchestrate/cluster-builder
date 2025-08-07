@@ -6,8 +6,9 @@ This section describes how to run and configure the test scripts used to deploy 
 
 Before running the test scripts, ensure the following:
 
- **.env File**: Ensure that the `.env` file is provided with correct information. You can find details on how to set this up in the [README](README.md).
+ **.env File**: Ensure that the `.env` file is provided with correct information. You can find details on how to set this up in the [README](../README.md).
 
+---
 ## Test Scripts Overview
 
 ### 1. test_deploy.py
@@ -69,6 +70,7 @@ To run the script:
 ```python
 python test_deploy.py
 ```
+---
 
 ### 2. test_deploy_json.py
 This script allows you to define the configuration for multiple nodes in a JSON file (node_config.json).
@@ -119,6 +121,7 @@ To run the script:
 ```python
 python test_deploy_json.py
 ```
+---
 
 ### 3. test_deploy_cluster_json.py
 This script expects a cluster_config.json file for defining clusters with multiple nodes.
@@ -172,6 +175,7 @@ To run the script:
 ```python
 python test_deploy_cluster_json.py
 ```
+---
 
 ### 4. test_remove.py
 This script removes a specific node from a cluster.
@@ -190,6 +194,8 @@ To run the script:
 python test_remove.py
 ```
 
+---
+
 ### 5. test_destroy.py
 This script destroys an entire cluster, removing all associated nodes and infrastructure.
 
@@ -205,3 +211,4 @@ To run the script:
 ```python
 python test_destroy.py
 ```
+---

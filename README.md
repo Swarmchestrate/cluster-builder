@@ -67,13 +67,13 @@ For database setup as a service, refer to the [database setup as service](docs/d
 ### 4. Populate .env file with access config
 The .env file is used to store environment variables required by the application. It contains configuration details for connecting to your cloud providers, the PostgreSQL database, and any other necessary resources.
 
-#### 1.  Rename or copy the example file to **.env**
+#### 4.1.  Rename or copy the example file to **.env**
 
 ```bash
 cp .env_example .env
 ```
 
-#### 2. Open the **.env** file and add the necessary configuration for your cloud providers and PostgreSQL:
+#### 4.2. Open the **.env** file and add the necessary configuration for your cloud providers and PostgreSQL:
 
 ```ini
 ## PG Configuration
@@ -189,6 +189,8 @@ The **remove_node** method:
 1. Destroys the node's infrastructure resources
 2. Removes the node's configuration from the cluster
 
+---
+
 ### Destroying an Entire Cluster
 
 To completely destroy a cluster and all its nodes:
@@ -207,41 +209,43 @@ The **destroy** method:
 Note for **Edge Devices**:
 Since the edge device is already provisioned, the `destroy` method will not remove K3s directly from the edge device. You will need to manually uninstall K3s from your edge device after the cluster is destroyed.
 
+---
+
 ### Important Configuration Requirements
 #### High Availability Flag (ha):
 
-For k3s_role="worker" or k3s_role="ha", you must specify a master_ip (the IP address of the master node).
+- For k3s_role="worker" or k3s_role="ha", you must specify a master_ip (the IP address of the master node).
 
-For k3s_role="master", you must not specify a master_ip.
+- For k3s_role="master", you must not specify a master_ip.
 
-The ha flag should be set to True for high availability deployment (usually when adding a ha or worker node to an existing master).
+- The ha flag should be set to True for high availability deployment (usually when adding a ha or worker node to an existing master).
 
 #### SSH Credentials:
 
-For all roles (k3s_role="master", k3s_role="worker", k3s_role="ha"), you must specify both ssh_user and ssh_private_key_path except for edge.
+- For all roles (k3s_role="master", k3s_role="worker", k3s_role="ha"), you must specify both ssh_user and ssh_private_key_path except for edge.
 
-The ssh_private_key_path should be the path to your SSH private key file. Ensure that the SSH key is copied to the specified path before running the script.
+- The ssh_private_key_path should be the path to your SSH private key file. Ensure that the SSH key is copied to the specified path before running the script.
 
-The ssh_key_name and the ssh_private_key_path are different—ensure that your SSH key is placed correctly at the provided ssh_private_key_path.
+- The ssh_key_name and the ssh_private_key_path are different—ensure that your SSH key is placed correctly at the provided ssh_private_key_path.
 
 #### Ports:
 You can specify custom ports for your nodes in the tcp_ports and udp_ports fields. However, certain ports are required for Kubernetes deployment (even if not specified explicitly):
 
 **TCP Ports:**
 
-2379-2380: For etcd communication
-6443: K3s API server
-10250: Kubelet metrics
-51820-51821: WireGuard (for encrypted networking)
-22: SSH access
-80, 443: HTTP/HTTPS access
-53: DNS (CoreDNS)
-5432: PostgreSQL access (master node)
+- 2379-2380: For etcd communication
+- 6443: K3s API server
+- 10250: Kubelet metrics
+- 51820-51821: WireGuard (for encrypted networking)
+- 22: SSH access
+- 80, 443: HTTP/HTTPS access
+- 53: DNS (CoreDNS)
+- 5432: PostgreSQL access (master node)
 
 **UDP Ports:**
 
-8472: VXLAN for Flannel
-53: DNS
+- 8472: VXLAN for Flannel
+- 53: DNS
 
 #### OpenStack:
 When provisioning on OpenStack, you should provide the value for 'floating_ip_pool' from which floating IPs can be allocated for the instance. If not specified, OpenTofu will not assign floating IP.
