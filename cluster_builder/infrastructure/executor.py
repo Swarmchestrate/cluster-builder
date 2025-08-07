@@ -13,7 +13,11 @@ class CommandExecutor:
 
     @staticmethod
     def run_command(
-        command: list, cwd: str, description: str = "command", timeout: int = None
+        command: list,
+        cwd: str,
+        description: str = "command",
+        timeout: int = None,
+        env: dict = None,  # <-- Add optional env param
     ) -> str:
         """
         Execute a shell command with proper logging and error handling.
@@ -41,6 +45,7 @@ class CommandExecutor:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
+                env=env,  # <-- Pass env here
             )
 
             # Wait for the process with timeout
