@@ -99,16 +99,19 @@ def is_target_module_block(tree: Tree, module_name: str) -> bool:
     if len(first_child.children) == 0 or not isinstance(first_child.children[0], Token):
         return False
 
-    if first_child.children[0].value != "module":
+    if first_child.children[0].value.strip() != "module":
         return False
 
     # Second child should be a STRING_LIT token with module name
     second_child = tree.children[1]
-    if not isinstance(second_child, Token) or second_child.value != f'"{module_name}"':
+    if not isinstance(second_child, Token):
+        return False
+    
+    # Check if the module name matches, allow some space trimming
+    if second_child.value.strip() != f'"{module_name}"':
         return False
 
     return True
-
 
 def simple_remove_module(tree, module_name, removed=False):
     """
@@ -138,6 +141,7 @@ def simple_remove_module(tree, module_name, removed=False):
                     and is_target_module_block(child, module_name)
                 ):
                     removed = True
+                    print(f"Module {module_name} found and removed.")  # Debug log
 
                     # Check if the next node is a new_line_or_comment, and skip it as well
                     if i + 1 < len(body_node.children):
@@ -156,7 +160,6 @@ def simple_remove_module(tree, module_name, removed=False):
 
     # No changes made
     return tree, removed
-
 
 def remove_module_block(main_tf_path, module_name: str):
     """
