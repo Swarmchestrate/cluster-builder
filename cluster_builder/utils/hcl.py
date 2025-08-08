@@ -1,8 +1,11 @@
+import json
 import os
 import hcl2
 from lark import Tree, Token
+import logging
+import re
 
-
+logger = logging.getLogger("cluster_builder")
 def add_backend_config(backend_tf_path, conn_str, schema_name):
     """
     Adds a PostgreSQL backend configuration to a Terraform file.
@@ -14,7 +17,7 @@ def add_backend_config(backend_tf_path, conn_str, schema_name):
     if os.path.exists(backend_tf_path):
         with open(backend_tf_path) as f:
             if 'backend "pg"' in f.read():
-                print("⚠️  Backend configuration already exists — skipping.")
+                logger.warning("⚠️ Backend config already exists, skipping: %s", backend_tf_path)
                 return
 
     # Build the backend configuration block
@@ -34,7 +37,7 @@ def add_backend_config(backend_tf_path, conn_str, schema_name):
     ) as f:  # Use "w" instead of "a" to create/overwrite the file
         f.write("\n".join(lines) + "\n")
 
-    print(f"✅ Added PostgreSQL backend configuration to {backend_tf_path}")
+    logger.info("✅ Added PostgreSQL backend config to %s", backend_tf_path)
 
 
 def add_module_block(main_tf_path, module_name, config):
@@ -48,7 +51,7 @@ def add_module_block(main_tf_path, module_name, config):
     if os.path.exists(main_tf_path):
         with open(main_tf_path) as f:
             if f'module "{module_name}"' in f.read():
-                print(f"⚠️  Module '{module_name}' already exists — skipping.")
+                logger.warning("⚠️ Module '%s' already exists, skipping in %s", module_name, main_tf_path)
                 return
 
     # Build the module block
@@ -60,6 +63,8 @@ def add_module_block(main_tf_path, module_name, config):
             v_str = "true" if v else "false"
         elif isinstance(v, (int, float)):
             v_str = str(v)
+        elif isinstance(v, (list, dict)):
+            v_str = json.dumps(v)
         elif v is None:
             continue
         else:
@@ -71,7 +76,7 @@ def add_module_block(main_tf_path, module_name, config):
     with open(main_tf_path, "a") as f:
         f.write("\n\n" + "\n".join(lines) + "\n")
 
-    print(f"✅ Added module '{module_name}' to {main_tf_path}")
+    logger.info("✅ Added module '%s' to %s", module_name, main_tf_path)
 
 
 def is_target_module_block(tree: Tree, module_name: str) -> bool:
@@ -94,16 +99,19 @@ def is_target_module_block(tree: Tree, module_name: str) -> bool:
     if len(first_child.children) == 0 or not isinstance(first_child.children[0], Token):
         return False
 
-    if first_child.children[0].value != "module":
+    if first_child.children[0].value.strip() != "module":
         return False
 
     # Second child should be a STRING_LIT token with module name
     second_child = tree.children[1]
-    if not isinstance(second_child, Token) or second_child.value != f'"{module_name}"':
+    if not isinstance(second_child, Token):
+        return False
+    
+    # Check if the module name matches, allow some space trimming
+    if second_child.value.strip() != f'"{module_name}"':
         return False
 
     return True
-
 
 def simple_remove_module(tree, module_name, removed=False):
     """
@@ -116,6 +124,9 @@ def simple_remove_module(tree, module_name, removed=False):
         body_node = tree.children[0]
 
         if isinstance(body_node, Tree) and body_node.data == "body":
+            # Debug: Log body node children
+            logger.debug("Body Node Children: %s", body_node.children)
+
             # Create new children list for the body node
             new_body_children = []
             skip_next = False
@@ -133,6 +144,7 @@ def simple_remove_module(tree, module_name, removed=False):
                     and is_target_module_block(child, module_name)
                 ):
                     removed = True
+                    print(f"Module {module_name} found and removed.")  # Debug log
 
                     # Check if the next node is a new_line_or_comment, and skip it as well
                     if i + 1 < len(body_node.children):
@@ -152,20 +164,21 @@ def simple_remove_module(tree, module_name, removed=False):
     # No changes made
     return tree, removed
 
-
 def remove_module_block(main_tf_path, module_name: str):
     """
     Removes a module block by name from main.tf for this cluster.
     """
     if not os.path.exists(main_tf_path):
-        print(f"⚠️  No main.tf found at {main_tf_path}")
+        logger.warning("⚠️ No main.tf found at %s", main_tf_path)
         return
 
     try:
         with open(main_tf_path, "r") as f:
             tree = hcl2.parse(f)
+            # Debug: Log the parsed tree structure
+            logger.debug("Parsed Tree: %s", tree)
     except Exception as e:
-        print(f"❌ Failed to parse HCL: {e}")
+        logger.error("❌ Failed to parse HCL in %s: %s", main_tf_path, e, exc_info=True)
         return
 
     # Process tree to remove target module block
@@ -173,8 +186,11 @@ def remove_module_block(main_tf_path, module_name: str):
 
     # If no modules were removed
     if not removed:
-        print(f"⚠️  No module named '{module_name}' found in {main_tf_path}")
+        logger.warning("⚠️ No module named '%s' found in %s", module_name, main_tf_path)
         return
+    
+    # Debug: Log the final tree structure after removal
+    logger.debug("Final Tree after module removal: %s", new_tree)
 
     try:
         # Reconstruct HCL
@@ -184,9 +200,9 @@ def remove_module_block(main_tf_path, module_name: str):
         with open(main_tf_path, "w") as f:
             f.write(new_source)
 
-        print(f"🗑️  Removed module '{module_name}' from {main_tf_path}")
+        logger.info("🗑️ Removed module '%s' from %s", module_name, main_tf_path)
     except Exception as e:
-        print(f"❌ Failed to reconstruct HCL: {e}")
+        logger.error("❌ Failed to reconstruct HCL in %s: %s", main_tf_path, e, exc_info=True)
         # Print more detailed error information
         import traceback
 
@@ -222,10 +238,61 @@ def extract_template_variables(template_path):
         return variables
 
     except FileNotFoundError:
-        print(f"Warning: Template file not found: {template_path}")
+        logger.warning(f"⚠️ Template file not found: {template_path}")
         return {}
 
     except Exception as e:
         error_msg = f"Failed to extract variables from {template_path}: {e}"
-        print(f"Error: {error_msg}")
+        logger.error(f"❌ {error_msg}")
         raise ValueError(error_msg)
+
+def add_output_blocks(outputs_tf_path, module_name, output_names):
+    existing_text = ""
+    
+    # Read existing content if the file exists
+    if os.path.exists(outputs_tf_path):
+        with open(outputs_tf_path, "r") as f:
+            existing_text = f.read()
+
+    lines_to_add = []
+    updated_lines = []
+
+    # Check and add output blocks
+    for output_name in output_names:
+        output_block = f'output "{output_name}" {{\n  value = module.{module_name}.{output_name}\n}}'.strip()
+
+        if f'output "{output_name}"' in existing_text:
+            # Check if the output block already exists in the file
+            logger.warning(f"⚠️ Output '{output_name}' already exists in {outputs_tf_path}. Checking if it needs an update.")
+            
+            # Only update if the value is None in the current output
+            if output_name in ["worker_ip", "ha_ip"] and "None" in existing_text:
+                updated_lines.append(output_block)
+            elif output_block not in existing_text:
+                # If it's there but not the same, we need to update it
+                updated_lines.append(output_block)
+            else:
+                logger.info(f"Output '{output_name}' is already correctly defined in {outputs_tf_path}.")
+            continue
+        else:
+            # If the output doesn't exist, add it
+            lines_to_add.append(output_block)
+
+    # Remove old output blocks before adding or updating new ones
+    if lines_to_add or updated_lines:
+        # Remove old output definitions for those outputs that will be replaced
+        for output_name in output_names:
+            existing_text = re.sub(
+                f'output "{output_name}".*?}}', '', existing_text, flags=re.DOTALL
+            )
+
+        # Combine all new output blocks and updates to add
+        final_output = "\n\n".join(lines_to_add + updated_lines)
+
+        # Append new or updated blocks
+        with open(outputs_tf_path, "w") as f:
+            f.write(existing_text.strip() + "\n\n" + final_output + "\n")
+
+        logger.info(f"✅ Added/updated outputs for module '{module_name}' in {outputs_tf_path}")
+    else:
+        logger.warning(f"⚠️ No new outputs to add or update in {outputs_tf_path}.")

@@ -2,10 +2,13 @@
 Swarmchestrate - Main orchestration class for K3s cluster management.
 """
 
+import json
 import os
 import logging
 import shutil
+import subprocess
 from typing import Optional
+import psycopg2
 
 from dotenv import load_dotenv
 
@@ -179,7 +182,7 @@ class Swarmchestrate:
             logger.error(error_msg)
             raise RuntimeError(error_msg)
 
-    def add_node(self, config: dict[str, any], dryrun: bool = False) -> str:
+    def add_node(self, config: dict[str, any], dryrun: bool = False) -> dict:
         """
         Add a node to an existing cluster or create a new cluster based on configuration.
 
@@ -192,7 +195,7 @@ class Swarmchestrate:
             dryrun: If True, only validate the configuration without deploying
 
         Returns:
-            The cluster name
+            The cluster name and other output values.
 
         Raises:
             ValueError: If required configuration is missing or invalid
@@ -200,6 +203,22 @@ class Swarmchestrate:
         """
         # Prepare the infrastructure configuration
         cluster_dir, prepared_config = self.prepare_infrastructure(config)
+
+        # Add output blocks for the module you just added
+        module_name = prepared_config["resource_name"]  # Assuming this is your module name
+        outputs_file = os.path.join(cluster_dir, "outputs.tf")
+
+        # Define common output names
+        output_names = ["cluster_name", "master_ip", "worker_ip", "ha_ip", "k3s_token"]
+
+        # Include additional outputs based on the cloud type
+        if "aws" in cluster_dir:
+            output_names.append("instance_status")
+        elif "openstack" in cluster_dir:
+            output_names.append("instance_power_state")
+
+        # Add output blocks
+        hcl.add_output_blocks(outputs_file, module_name, output_names)
 
         logger.info(f"Adding node for cluster '{prepared_config['cluster_name']}'")
 
@@ -211,11 +230,46 @@ class Swarmchestrate:
             logger.info(
                 f"Successfully added '{node_name}' for cluster '{cluster_name}'"
             )
-            return cluster_name
+            # Run 'tofu output -json' to get outputs
+            result = subprocess.run(
+                ["tofu", "output", "-json"],
+                cwd=cluster_dir,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=True,
+            )
+            outputs = json.loads(result.stdout)
+
+            # Extract output values for all required fields
+            result_outputs = {
+                "cluster_name": outputs.get("cluster_name", {}).get("value"),
+                "master_ip": outputs.get("master_ip", {}).get("value"),
+                "k3s_token": outputs.get("k3s_token", {}).get("value"),
+                "worker_ip": outputs.get("worker_ip", {}).get("value"),
+                "ha_ip": outputs.get("ha_ip", {}).get("value"),
+            }
+
+            # Add cloud-specific output
+            if "aws" in cluster_dir:
+                result_outputs["instance_status"] = outputs.get("instance_status", {}).get("value")
+            elif "openstack" in cluster_dir:
+                result_outputs["instance_power_state"] = outputs.get("instance_power_state", {}).get("value")
+
+            logger.info(f"Terraform outputs: {result_outputs}")
+
+            return result_outputs
+
+        except subprocess.CalledProcessError as e:
+            error_msg = f"Failed to get outputs: {e.stderr.strip()}"
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
+        
         except Exception as e:
             error_msg = f"Failed to add node: {e}"
             logger.error(error_msg)
             raise RuntimeError(error_msg)
+
 
     def remove_node(
         self, cluster_name: str, resource_name: str, dryrun: bool = False
@@ -290,18 +344,32 @@ class Swarmchestrate:
             logger.error(error_msg)
             raise RuntimeError(error_msg)
 
+        # Retrieve the environment variables for tofu logs
+        tf_log = os.getenv("TF_LOG")
+        tf_log_path = os.getenv("TF_LOG_PATH")
+
+        # Check if the environment variables are set
+        if not tf_log or not tf_log_path:
+            print("Error: Missing required environment variables.")
+            exit(1)
+
+        # Prepare environment variables for subprocess
+        env_vars = os.environ.copy()
+        env_vars["TF_LOG"] = tf_log
+        env_vars["TF_LOG_PATH"] = tf_log_path
+
         try:
             # Initialise OpenTofu
             init_command = ["tofu", "init"]
             if dryrun:
                 logger.info("Dryrun: will init without backend and validate only")
                 init_command.append("-backend=false")
-            CommandExecutor.run_command(init_command, cluster_dir, "OpenTofu init")
+            CommandExecutor.run_command(init_command, cluster_dir, "OpenTofu init", env=env_vars)
 
             # Validate the deployment
             if dryrun:
                 CommandExecutor.run_command(
-                    ["tofu", "validate"], cluster_dir, "OpenTofu validate"
+                    ["tofu", "validate"], cluster_dir, "OpenTofu validate", env=env_vars
                 )
                 logger.info("Infrastructure successfully validated")
                 return
@@ -312,11 +380,12 @@ class Swarmchestrate:
                 cluster_dir,
                 "OpenTofu plan",
                 timeout=30,
+                env=env_vars,
             )
 
             # Apply the deployment
             CommandExecutor.run_command(
-                ["tofu", "apply", "-auto-approve"], cluster_dir, "OpenTofu apply"
+                ["tofu", "apply", "-auto-approve"], cluster_dir, "OpenTofu apply", env=env_vars
             )
             logger.info("Infrastructure successfully updated")
 
@@ -351,6 +420,15 @@ class Swarmchestrate:
             return
 
         try:
+            # Run tofu init -upgrade to update the dependency lock file
+            logger.info("Running 'tofu init -upgrade' to update the lock file")
+            CommandExecutor.run_command(
+                ["tofu", "init", "-upgrade"], 
+                cluster_dir, 
+                "OpenTofu init -upgrade", 
+                timeout=30
+            )
+
             # Plan destruction
             CommandExecutor.run_command(
                 ["tofu", "plan", "-destroy", "-input=false"],
@@ -370,7 +448,50 @@ class Swarmchestrate:
             shutil.rmtree(cluster_dir, ignore_errors=True)
             logger.info(f"Removed cluster directory: {cluster_dir}")
 
+            # Remove schema and database entry from PostgreSQL
+            self.remove_cluster_schema_from_db(cluster_name)
+
         except RuntimeError as e:
             error_msg = f"Failed to destroy cluster '{cluster_name}': {str(e)}"
             logger.error(error_msg)
             raise RuntimeError(error_msg)
+
+    def remove_cluster_schema_from_db(self, cluster_name: str) -> None:
+            """
+            Removes the schema and the entry for the cluster from the PostgreSQL database.
+
+            Args:
+                cluster_name: The name of the cluster to remove from the database
+
+            Raises:
+                RuntimeError: If the database operation fails
+            """
+            logger.info(f"Removing schema for cluster '{cluster_name}' from the PostgreSQL database...")
+
+            # Create a PostgreSQL connection string using the config
+            connection_string = self.pg_config.get_connection_string()
+
+            try:
+                # Connect to the PostgreSQL database
+                connection = psycopg2.connect(connection_string)
+                cursor = connection.cursor()
+
+                # Define the SQL query to delete the cluster schema
+                drop_schema_query = f"DROP SCHEMA IF EXISTS {cluster_name} CASCADE"
+                cursor.execute(drop_schema_query)
+
+                # Commit the transaction
+                connection.commit()
+
+                logger.info(f"Schema for cluster '{cluster_name}' removed from the database")
+
+            except psycopg2.Error as e:
+                logger.error(f"Failed to remove schema for cluster '{cluster_name}' from the database: {e}")
+                raise RuntimeError(f"Failed to remove schema for cluster '{cluster_name}' from the database")
+
+            finally:
+                # Close the database connection
+                if cursor:
+                    cursor.close()
+                if connection:
+                    connection.close()
