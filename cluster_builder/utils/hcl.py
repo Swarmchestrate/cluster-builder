@@ -124,6 +124,9 @@ def simple_remove_module(tree, module_name, removed=False):
         body_node = tree.children[0]
 
         if isinstance(body_node, Tree) and body_node.data == "body":
+            # Debug: Log body node children
+            logger.debug("Body Node Children: %s", body_node.children)
+
             # Create new children list for the body node
             new_body_children = []
             skip_next = False
@@ -172,6 +175,8 @@ def remove_module_block(main_tf_path, module_name: str):
     try:
         with open(main_tf_path, "r") as f:
             tree = hcl2.parse(f)
+            # Debug: Log the parsed tree structure
+            logger.debug("Parsed Tree: %s", tree)
     except Exception as e:
         logger.error("❌ Failed to parse HCL in %s: %s", main_tf_path, e, exc_info=True)
         return
@@ -183,6 +188,9 @@ def remove_module_block(main_tf_path, module_name: str):
     if not removed:
         logger.warning("⚠️ No module named '%s' found in %s", module_name, main_tf_path)
         return
+    
+    # Debug: Log the final tree structure after removal
+    logger.debug("Final Tree after module removal: %s", new_tree)
 
     try:
         # Reconstruct HCL

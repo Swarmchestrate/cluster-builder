@@ -1,14 +1,18 @@
 import os
 import tempfile
 import hcl2
+import logging
 from cluster_builder.utils.hcl import (
     add_backend_config,
     add_module_block,
     remove_module_block,
 )
-
+# Set up logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 def test_add_backend_config_creates_file():
+    logger.debug("Starting test_add_backend_config_creates_file...")
     # Arrange
     with tempfile.TemporaryDirectory() as temp_dir:
         backend_tf_path = os.path.join(temp_dir, "backend.tf")
@@ -36,6 +40,7 @@ def test_add_backend_config_creates_file():
 
 
 def test_add_backend_config_skips_existing_file():
+    logger.debug("Starting test_add_backend_config_skips_existing_file...")
     # Arrange
     with tempfile.TemporaryDirectory() as temp_dir:
         backend_tf_path = os.path.join(temp_dir, "backend.tf")
@@ -52,8 +57,7 @@ def test_add_backend_config_skips_existing_file():
         # Assert
         with open(backend_tf_path, "r") as f:
             parsed = hcl2.parse(f)
-            print(parsed)
-            f.seek(0)
+            logger.debug("Parsed HCL content: %s", parsed)
             content = f.read()
             assert 'conn_str = "existing"' in content, (
                 "Existing content was overwritten"
@@ -62,8 +66,8 @@ def test_add_backend_config_skips_existing_file():
                 "Existing content was overwritten"
             )
 
-
 def test_remove_module_block_removes_existing_module():
+    logger.debug("Starting test_remove_module_block_removes_existing_module...")
     # Arrange
     with tempfile.TemporaryDirectory() as temp_dir:
         main_tf_path = os.path.join(temp_dir, "main.tf")
@@ -83,10 +87,12 @@ def test_remove_module_block_removes_existing_module():
         # Assert
         with open(main_tf_path, "r") as f:
             remaining_content = f.read()
+            logger.debug("Remaining content after removal: %s", remaining_content)
             assert module_name not in remaining_content, "Module block was not removed"
 
 
 def test_remove_module_block_no_matching_module():
+    logger.debug("Starting test_remove_module_block_no_matching_module...")
     # Arrange
     with tempfile.TemporaryDirectory() as temp_dir:
         main_tf_path = os.path.join(temp_dir, "main.tf")
