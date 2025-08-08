@@ -44,7 +44,7 @@ def test_add_backend_config_skips_existing_file():
     # Arrange
     with tempfile.TemporaryDirectory() as temp_dir:
         backend_tf_path = os.path.join(temp_dir, "backend.tf")
-        conn_str = "postgres://user:password@localhost:5432/dbname"
+        conn_str = "***localhost:5432/dbname"
         schema_name = "test_schema"
 
         # Create an existing backend.tf file
@@ -56,15 +56,10 @@ def test_add_backend_config_skips_existing_file():
 
         # Assert
         with open(backend_tf_path, "r") as f:
-            parsed = hcl2.parse(f)
-            logger.debug("Parsed HCL content: %s", parsed)
             content = f.read()
-            assert 'conn_str = "existing"' in content, (
-                "Existing content was overwritten"
-            )
-            assert 'schema_name = "existing"' in content, (
-                "Existing content was overwritten"
-            )
+            logger.debug("Backend TF content: %s", content)
+            assert 'conn_str = "existing"' in content, "Existing content was overwritten"
+            assert 'schema_name = "existing"' in content, "Existing content was overwritten"
 
 def test_remove_module_block_removes_existing_module():
     logger.debug("Starting test_remove_module_block_removes_existing_module...")
