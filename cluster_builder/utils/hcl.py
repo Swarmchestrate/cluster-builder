@@ -119,7 +119,7 @@ def is_target_module_block(tree: Tree, module_name: str) -> bool:
         return False
 
     if len(second_child.children) == 0 or not isinstance(second_child.children[0], Token):
-        logger.d("Rinfojected: second child Tree has no Token children")
+        logger.info("Rejected: second child Tree has no Token children")
         return False
 
     second_value = second_child.children[0].value.strip().strip('"')
