@@ -99,19 +99,16 @@ def is_target_module_block(tree: Tree, module_name: str) -> bool:
     if len(first_child.children) == 0 or not isinstance(first_child.children[0], Token):
         return False
 
-    if first_child.children[0].value.strip() != "module":
+    if first_child.children[0].value != "module":
         return False
 
     # Second child should be a STRING_LIT token with module name
     second_child = tree.children[1]
-    if not isinstance(second_child, Token):
-        return False
-    
-    # Check if the module name matches, allow some space trimming
-    if second_child.value.strip() != f'"{module_name}"':
+    if not isinstance(second_child, Token) or second_child.value != f'"{module_name}"':
         return False
 
     return True
+
 
 def simple_remove_module(tree, module_name, removed=False):
     """
@@ -163,6 +160,7 @@ def simple_remove_module(tree, module_name, removed=False):
 
     # No changes made
     return tree, removed
+
 
 def remove_module_block(main_tf_path, module_name: str):
     """

@@ -62,11 +62,11 @@ def test_add_backend_config_skips_existing_file():
             assert 'schema_name = "existing"' in content, "Existing content was overwritten"
 
 def test_remove_module_block_removes_existing_module():
-    logger.debug("Starting test_remove_module_block_removes_existing_module...")
+    logger.info("Starting test_remove_module_block_removes_existing_module...")
     # Arrange
     with tempfile.TemporaryDirectory() as temp_dir:
         main_tf_path = os.path.join(temp_dir, "main.tf")
-        module_name = "test_module"
+        module_name = "test_module1"
         content = f"""
         module "{module_name}" {{
             source = "some/source"
@@ -75,15 +75,27 @@ def test_remove_module_block_removes_existing_module():
         """
         with open(main_tf_path, "w") as f:
             f.write(content)
+        logger.info("Initial main.tf content:\n%r", content)
 
         # Act
+        logger.info("Calling remove_module_block with file=%s and module_name=%s", main_tf_path, module_name)
         remove_module_block(main_tf_path, module_name)
 
         # Assert
         with open(main_tf_path, "r") as f:
             remaining_content = f.read()
-            logger.debug("Remaining content after removal: %s", remaining_content)
-            assert module_name not in remaining_content, "Module block was not removed"
+            logger.info("Remaining content after removal: %s", remaining_content)
+        
+        logger.info("Remaining content after removal:\n%r", remaining_content)
+
+        # Debug check: does it still contain module name?
+        if module_name in remaining_content:
+            logger.warning("Module name %r still found in file content!", module_name)
+        else:
+            logger.debug("Module name %r not found in file after removal.", module_name)
+
+        # Assert
+        assert module_name not in remaining_content, "Module block was not removed"
 
 
 def test_remove_module_block_no_matching_module():
