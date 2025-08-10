@@ -84,6 +84,8 @@ def is_target_module_block(tree: Tree, module_name: str) -> bool:
     Check if the tree is a module block with the specified name.
     """
     logger.info(f"Checking tree with data: {tree.data}, children count: {len(tree.children)}")
+    logger.info(f"Children types and values: {[ (type(c), getattr(c, 'value', None)) for c in tree.children ]}")
+
     if tree.data != "block":
         logger.info("Rejected: tree.data is not 'block'")
         return False
