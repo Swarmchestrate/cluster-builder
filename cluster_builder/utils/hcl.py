@@ -103,8 +103,7 @@ def is_target_module_block(tree: Tree, module_name: str) -> bool:
 
     # First child should have a NAME token with 'module'
     if len(first_child.children) == 0 or not isinstance(first_child.children[0], Token):
-        if len(first_child.children) == 0:
-         logger.debug("Rejected: first child has no Token children")
+        logger.debug("Rejected: first child has no Token children")
         return False
 
     first_value = first_child.children[0].value.strip()
@@ -112,24 +111,24 @@ def is_target_module_block(tree: Tree, module_name: str) -> bool:
         logger.debug(f"Rejected: first child token value '{first_value}' is not 'module'")
         return False
 
-    # Second child should be a STRING_LIT token with module name
+    # Second child: could be a Token or Tree with Token child for module name
     second_child = tree.children[1]
-    if not isinstance(second_child, Tree):
-        logger.info(f"Rejected: second child is not a Tree (found {type(second_child)})")
+
+    # Extract the module name value regardless of Token or Tree
+    if isinstance(second_child, Token):
+        second_value = second_child.value.strip().strip('"')
+    elif isinstance(second_child, Tree) and len(second_child.children) > 0 and isinstance(second_child.children[0], Token):
+        second_value = second_child.children[0].value.strip().strip('"')
+    else:
+        logger.info(f"Rejected: second child is neither Token nor Tree with Token (found {type(second_child)})")
         return False
 
-    if len(second_child.children) == 0 or not isinstance(second_child.children[0], Token):
-        logger.info("Rejected: second child Tree has no Token children")
-        return False
-
-    second_value = second_child.children[0].value.strip().strip('"')
     if second_value != module_name:
         logger.debug(f"Rejected: module name '{second_value}' does not match target '{module_name}'")
         return False
 
     logger.info(f"Module block matched for module name '{module_name}'")
     return True
-
 
 def simple_remove_module(tree, module_name, removed=False):
     """
