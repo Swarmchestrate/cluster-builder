@@ -83,36 +83,50 @@ def is_target_module_block(tree: Tree, module_name: str) -> bool:
     """
     Check if the tree is a module block with the specified name.
     """
+    logger.info(f"Checking tree with data: {tree.data}, children count: {len(tree.children)}")
     if tree.data != "block":
+        logger.info("Rejected: tree.data is not 'block'")
         return False
 
     # Need at least 3 children: identifier, name, body
     if len(tree.children) < 3:
+        logger.info(f"Rejected: Less than 3 children ({len(tree.children)})")
         return False
 
     # First child should be an identifier tree
     first_child = tree.children[0]
     if not isinstance(first_child, Tree) or first_child.data != "identifier":
+        logger.info("Rejected: First child is not a Tree or not 'identifier'")
         return False
 
     # First child should have a NAME token with 'module'
     if len(first_child.children) == 0 or not isinstance(first_child.children[0], Token):
+        if len(first_child.children) == 0:
+            logger.info("Rejected: First child has no children")
+        else:
+            logger.info("Rejected: First child's first child is not a Token")
         return False
 
-    if first_child.children[0].value != "module":
+    first_value = first_child.children[0].value.strip()
+    if first_value != "module":
+        logger.info(f"Rejected: First token value is not 'module', but '{first_value}'")
         return False
 
     # Second child should be a STRING_LIT token with module name
     second_child = tree.children[1]
     if not isinstance(second_child, Token):
+        logger.info("Rejected: Second child is not a Token")
         return False
 
     # Normalise value: remove spaces and surrounding quotes
     second_value = second_child.value.strip().strip('"')
+    logger.info(f"Second token value normalized: '{second_value}' (expected: '{module_name}')")
 
     if second_value != module_name:
+        logger.info(f"Rejected: Second token value '{second_value}' does not match module name '{module_name}'")
         return False
 
+    logger.info("Module block matched successfully!")
     return True
 
 
