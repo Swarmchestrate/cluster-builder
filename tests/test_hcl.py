@@ -2,6 +2,7 @@ import os
 import tempfile
 import hcl2
 import logging
+import textwrap
 from cluster_builder.utils.hcl import (
     add_backend_config,
     add_module_block,
@@ -67,12 +68,12 @@ def test_remove_module_block_removes_existing_module():
     with tempfile.TemporaryDirectory() as temp_dir:
         main_tf_path = os.path.join(temp_dir, "main.tf")
         module_name = "test_module1"
-        content = f"""
-        module "{module_name}" {{
-            source = "some/source"
-            param1 = "value1"
-        }}
-        """
+        content = textwrap.dedent(f"""
+    module "{module_name}" {{
+        source = "some/source"
+        param1 = "value1"
+    }}
+""")
         with open(main_tf_path, "w") as f:
             f.write(content)
         logger.info("Initial main.tf content:\n%r", content)
