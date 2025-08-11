@@ -38,6 +38,6 @@ else
 fi
 
 log_message "K3s installation completed successfully."
-
+fi
 
 log_message "=== Script completed at $(date) ==="
