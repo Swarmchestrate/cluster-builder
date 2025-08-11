@@ -114,7 +114,7 @@ def is_target_module_block(tree: Tree, module_name: str) -> bool:
     # Second child: could be a Token or Tree with Token child for module name
     second_child = tree.children[1]
 
-    if not isinstance(second_child, Token) or second_child.value != f'"{module_name}"':
+    if not isinstance(second_child, Token) or second_child.value != module_name:
         logger.debug(f"Second child check failed: type={type(second_child)}, value={getattr(second_child, 'value', None)} expected=\"{module_name}\"")
         return False
 
