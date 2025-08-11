@@ -37,10 +37,12 @@ class PostgresConfig:
         missing_keys = [key for key in required_keys if key not in config]
 
         if missing_keys:
+            logger.error(f"Missing required PostgreSQL configuration keys: {', '.join(missing_keys)}")
             raise ValueError(
                 f"Missing required PostgreSQL configuration: {', '.join(missing_keys)}"
             )
 
+        logger.info(f"Creating PostgresConfig from dict with user={config.get('user')} host={config.get('host')} database={config.get('database')}")
         return cls(
             user=config["user"],
             password=config["password"],
@@ -77,11 +79,12 @@ class PostgresConfig:
         missing_vars = [var for var in required_vars if not os.environ.get(var)]
 
         if missing_vars:
+            logger.error(f"Missing required PostgreSQL environment variables: {', '.join(missing_vars)}")
             raise ValueError(
                 f"Missing required PostgreSQL environment variables: {', '.join(missing_vars)}"
             )
 
-        # Create config from environment variables
+        logger.info(f"Creating PostgresConfig from environment with user={os.environ.get('POSTGRES_USER')} host={os.environ.get('POSTGRES_HOST')} database={os.environ.get('POSTGRES_DATABASE')}")
         return cls(
             user=os.environ["POSTGRES_USER"],
             password=os.environ["POSTGRES_PASSWORD"],

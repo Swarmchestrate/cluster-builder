@@ -1,4 +1,4 @@
-#AWS config example
+# AWS config example
 aws_config = {
     "cloud": "aws",
     "k3s_role": "master",
@@ -9,38 +9,48 @@ aws_config = {
     "ami": "ami-0c0493bbac867d427",
     "ssh_user": "your_user",
     "ssh_private_key_path": "/path/to/key.pem",
-    # "master_ip":"12.13.14.15",
-    # "cluster_name":"elastic_mcnulty",
+    # Optional:
+    # "master_ip": "12.13.14.15",
+    # "cluster_name": "elastic_mcnulty",
+    # "security_group_id": "sg-xxxxxxxxxxxxxxx",
+    # "tcp_ports": [80, 443],
+    # "udp_ports": [53]
 }
 
-# openstack config example
+# OpenStack config example
 openstack_config = {
     "cloud": "openstack",
     "openstack_image_id": "6f44fc9-49ad-40e7-a4c1-f313fe413ac9",
     "openstack_flavor_id": "m2.small",
     "ssh_key_name": "test",
-    "openstack_size": "10", #in GB
+    "volume_size": "10",  # size in GB, renamed for consistency
     "k3s_token": "testtoken",
     "k3s_role": "master",
     "ha": False,
-    "external_ip": "10.0.0.1", # floating IP
     "ssh_user": "your_user",
     "ssh_private_key_path": "/path/to/key.pem",
-    # "master_ip":"12.13.14.15",
-    # "cluster_name":"elastic_mcnulty"
+    "network_name": "public_net",
+    "network_id": "a1916885-1aa1-4f72-a7dd-b8e36f155bb7",
+    # Optional:
+    # "master_ip": "12.13.14.15",
+    # "cluster_name": "elastic_mcnulty",
+    # "security_group_id": "existing-sg-id",
+    # "tcp_ports": [8080],
+    # "udp_ports": []
 }
 
-# Edge config sample
+# Edge device config example
 edge_config = {
     "cloud": "edge",
     "edge_device_ip": "10.0.0.1",
     "ssh_user": "your_user",
-    "ssh_auth_method": "password",  # can be "password" or "key"
-    "ssh_password": "your_password",  # only used if ssh_auth_method == "password"
-    # "ssh_private_key": "/path/to/key.pem",  # only used if ssh_auth_method == "key"
+    "ssh_auth_method": "key",  # "password" or "key"
+    "ssh_private_key": "/path/to/key.pem",  # required if ssh_auth_method == "key"
+    # "ssh_password": "your_password",  # required if ssh_auth_method == "password"
     "k3s_token": "testtoken",
     "k3s_role": "worker",
     "ha": False,
+    # Optional:
     # "master_ip": "10.0.0.1",
-    # "cluster_name": "elastic_mcnulty", 
-  }
+    # "cluster_name": "elastic_mcnulty"
+}
