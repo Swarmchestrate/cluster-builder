@@ -106,7 +106,7 @@ def is_target_module_block(tree: Tree, module_name: str) -> bool:
         logger.debug("Rejected: first child has no Token children")
         return False
 
-    first_value = first_child.children[0].value.strip()
+    first_value = first_child.children[0].value
     if first_value != "module":
         logger.debug(f"Rejected: first child token value '{first_value}' is not 'module'")
         return False
@@ -114,17 +114,8 @@ def is_target_module_block(tree: Tree, module_name: str) -> bool:
     # Second child: could be a Token or Tree with Token child for module name
     second_child = tree.children[1]
 
-    # Extract the module name value regardless of Token or Tree
-    if isinstance(second_child, Token):
-        second_value = second_child.value.strip().strip('"')
-    elif isinstance(second_child, Tree) and len(second_child.children) > 0 and isinstance(second_child.children[0], Token):
-        second_value = second_child.children[0].value.strip().strip('"')
-    else:
-        logger.info(f"Rejected: second child is neither Token nor Tree with Token (found {type(second_child)})")
-        return False
-
-    if second_value != module_name:
-        logger.debug(f"Rejected: module name '{second_value}' does not match target '{module_name}'")
+    if not isinstance(second_child, Token) or second_child.value != f'"{module_name}"':
+        logger.debug(f"Second child check failed: type={type(second_child)}, value={getattr(second_child, 'value', None)} expected=\"{module_name}\"")
         return False
 
     logger.info(f"Module block matched for module name '{module_name}'")

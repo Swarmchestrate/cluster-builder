@@ -104,12 +104,12 @@ def test_remove_module_block_no_matching_module():
     with tempfile.TemporaryDirectory() as temp_dir:
         main_tf_path = os.path.join(temp_dir, "main.tf")
         module_name = "non_existent_module"
-        content = """
-        module "existing_module" {
-            source = "some/source"
-            param1 = "value1"
-        }
-        """
+        content = """\
+module "existing_module" {
+    source = "some/source"
+    param1 = "value1"
+}
+"""
         with open(main_tf_path, "w") as f:
             f.write(content)
 
