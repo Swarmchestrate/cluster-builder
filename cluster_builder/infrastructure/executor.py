@@ -5,6 +5,9 @@ Command execution utilities for infrastructure management.
 import subprocess
 import logging
 
+from yaspin import yaspin
+from yaspin.spinners import Spinners
+
 logger = logging.getLogger("swarmchestrate")
 
 
@@ -37,57 +40,49 @@ class CommandExecutor:
         cmd_str = " ".join(command)
         logger.info(f"Running {description}: {cmd_str}")
 
-        try:
-            # Start the process using Popen
-            process = subprocess.Popen(
-                command,
-                cwd=cwd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                env=env,  # <-- Pass env here
-            )
+        show_spinner = timeout is None or timeout > 15
 
-            # Wait for the process with timeout
+        process = subprocess.Popen(
+            command,
+            cwd=cwd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=env,
+        )
+
+        if show_spinner:
             try:
-                stdout, stderr = process.communicate(timeout=timeout)
-
-                # Check if the process was successful
-                if process.returncode != 0:
-                    error_msg = f"Error executing {description}: {stderr}"
-                    logger.error(error_msg)
-                    raise RuntimeError(error_msg)
-
-                logger.debug(f"{description.capitalize()} output: {stdout}")
-                return stdout
-
-            except subprocess.TimeoutExpired:
-                # Process timed out - try to get any output so far
-                # Kill the process
-                process.kill()
-
-                # Capture any output that was generated before the timeout
+                process.wait(timeout=15)
                 stdout, stderr = process.communicate()
+                return CommandExecutor._check_result(stdout, stderr, process.returncode, description)
+            except subprocess.TimeoutExpired:
+                pass  # Still running → spinner starts
 
-                # Print and log the captured output
-                print(f"\n--- {description.capitalize()} stdout before timeout ---")
-                print(stdout)
-                print(f"\n--- {description.capitalize()} stderr before timeout ---")
-                print(stderr)
+        # Either timeout <= 15s, or process still running after 15s
+        spinner = yaspin(Spinners.point, text=f"Running {description}...", color="cyan") if show_spinner else None
+        if spinner:
+            spinner.start()
 
-                error_msg = (
-                    f"{description.capitalize()} timed out after {timeout} seconds"
-                )
-                logger.error(error_msg)
-                raise RuntimeError(error_msg) from None
+        try:
+            stdout, stderr = process.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            stdout, stderr = process.communicate()
+            if spinner:
+                spinner.fail("⏰")
+            raise RuntimeError(f"{description.capitalize()} timed out after {timeout} seconds")
 
-        except subprocess.CalledProcessError as e:
-            error_msg = f"Error executing {description}: {e.stderr}"
-            logger.error(error_msg)
-            raise RuntimeError(error_msg)
-        except Exception as e:
-            if not isinstance(e, RuntimeError):  # Avoid re-wrapping our own exceptions
-                error_msg = f"Unexpected error during {description}: {str(e)}"
-                logger.error(error_msg)
-                raise RuntimeError(error_msg)
-            raise
+        if spinner:
+            spinner.ok("✅") if process.returncode == 0 else spinner.fail("💥")
+
+        return CommandExecutor._check_result(stdout, stderr, process.returncode, description)
+
+    @staticmethod
+    def _check_result(stdout, stderr, returncode, description):
+        if returncode != 0:
+            err = f"Error executing {description}: {stderr}"
+            logger.error(err)
+            raise RuntimeError(err)
+        logger.debug(f"{description.capitalize()} output: {stdout}")
+        return stdout
