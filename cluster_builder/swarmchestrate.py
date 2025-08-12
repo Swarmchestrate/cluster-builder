@@ -345,8 +345,8 @@ class Swarmchestrate:
             raise RuntimeError(error_msg)
 
         # Retrieve the environment variables for tofu logs
-        tf_log = os.getenv("TF_LOG")
-        tf_log_path = os.getenv("TF_LOG_PATH")
+        tf_log = os.getenv("TF_LOG", "INFO")
+        tf_log_path = os.getenv("TF_LOG_PATH", "/tmp/opentofu.log")
 
         # Check if the environment variables are set
         if not tf_log or not tf_log_path:
