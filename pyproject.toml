@@ -14,11 +14,14 @@ authors = [
 license = {text = "Apache2"}
 
 dependencies = [
-    "names_generator",
-    "python-hcl2",
-    "lark-parser",
-    "python-dotenv"
+  "names_generator==0.2.0",
+  "python-hcl2==7.2",
+  "lark-parser==0.12.0",
+  "python-dotenv==1.1.1",
+  "psycopg2==2.9.10",
+  "yaspin==3.1.0"
 ]
+
 
 [tool.setuptools.packages.find]
 where = ["."]
