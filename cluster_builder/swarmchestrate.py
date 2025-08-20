@@ -46,6 +46,7 @@ class Swarmchestrate:
         load_dotenv()
 
         try:
+            logger.debug("Loading PostgreSQL configuration from environment...")
             self.pg_config = PostgresConfig.from_env()
         except ValueError as e:
             logger.error(f"Invalid PostgreSQL configuration: {e}")
@@ -55,7 +56,7 @@ class Swarmchestrate:
         self.template_manager = TemplateManager()
         self.cluster_config = ClusterConfig(self.template_manager, output_dir)
 
-        logger.info(
+        logger.debug(
             f"Initialised with template_dir={template_dir}, output_dir={output_dir}"
         )
 
@@ -71,15 +72,6 @@ class Swarmchestrate:
         """
         return self.cluster_config.get_cluster_output_dir(cluster_name)
 
-    def generate_random_name(self) -> str:
-        """
-        Generate a readable random string using names-generator.
-
-        Returns:
-            A randomly generated name
-        """
-        return self.cluster_config.generate_random_name()
-
     def validate_configuration(self, cloud: str, config: dict) -> list:
         """
         Validate a configuration against the required variables for a cloud provider.
@@ -91,18 +83,21 @@ class Swarmchestrate:
         Returns:
             List of missing required variables (empty if all required variables are present)
         """
+        logger.debug(f"Validating configuration for cloud={cloud}, role={config.get('k3s_role')}")
         # Master IP validation
         has_master_ip = "master_ip" in config and config["master_ip"]
         role = config["k3s_role"]
 
         # Cannot add a master node to an existing cluster
         if has_master_ip and role == "master":
+            logger.error("Invalid configuration: master_ip specified with master role")
             raise ValueError(
                 "Cannot add master to existing cluster (master_ip specified with master role)"
             )
 
         # Worker/HA nodes require a master IP
         if not has_master_ip and role in ["worker", "ha"]:
+            logger.error(f"Invalid configuration: Role '{role}' requires master_ip to be specified")
             raise ValueError(f"Role '{role}' requires master_ip to be specified")
 
         required_vars = self.template_manager.get_required_variables(cloud)
@@ -113,6 +108,11 @@ class Swarmchestrate:
             # If variable has no default and is not in config, it's required but missing
             if "default" not in var_config and var_name not in config:
                 missing_vars.append(var_name)
+
+        if missing_vars:
+            logger.warning(f"⚠️ Missing required variables for {cloud}: {missing_vars}")
+        else:
+            logger.debug(f"All required variables provided for {cloud}")
 
         return missing_vars
 
@@ -137,9 +137,11 @@ class Swarmchestrate:
             RuntimeError: If file operations fail
         """
         try:
+            logger.debug("Preparing infrastructure configuration...")
             # Prepare the configuration
             cluster_dir, prepared_config = self.cluster_config.prepare(config)
-
+            logger.debug(f"Cluster directory prepared at: {cluster_dir}")
+        
             # Validate the configuration
             cloud = prepared_config["cloud"]
             missing_vars = self.validate_configuration(cloud, prepared_config)
@@ -147,13 +149,14 @@ class Swarmchestrate:
                 raise ValueError(
                     f"Missing required variables for cloud provider '{cloud}': {', '.join(missing_vars)}"
                 )
+            logger.debug(f"Configuration validated for cloud: {cloud}")
 
             # Create provider configuration
             if cloud!= "edge" :
                 self.template_manager.create_provider_config(cluster_dir, cloud)
-                logger.info(f"Created provider configuration for {cloud}")
+                logger.debug(f"Created provider configuration for {cloud}")
             else:
-                logger.info("Skipping provider configuration for edge.")
+                logger.debug("Skipping provider configuration for edge.")
 
             # Create Terraform files
             main_tf_path = os.path.join(cluster_dir, "main.tf")
@@ -168,17 +171,18 @@ class Swarmchestrate:
                 conn_str,
                 prepared_config["cluster_name"],
             )
-            logger.info(f"Added backend configuration to {backend_tf_path}")
+            logger.debug(f"Added backend configuration to {backend_tf_path}")
 
             # Add module block
             target = prepared_config["resource_name"]
             hcl.add_module_block(main_tf_path, target, prepared_config)
-            logger.info(f"Added module block to {main_tf_path}")
+            logger.debug(f"Added module block to {main_tf_path}")
+            logger.debug("Infrastructure preparation complete.")
 
             return cluster_dir, prepared_config
 
         except Exception as e:
-            error_msg = f"Failed to prepare infrastructure: {e}"
+            error_msg = f"❌ Failed to prepare infrastructure: {e}"
             logger.error(error_msg)
             raise RuntimeError(error_msg)
 
@@ -202,15 +206,18 @@ class Swarmchestrate:
             RuntimeError: If preparation or deployment fails
         """
         # Prepare the infrastructure configuration
+        
         cluster_dir, prepared_config = self.prepare_infrastructure(config)
-
+        role = prepared_config["k3s_role"]
+        
         # Add output blocks for the module you just added
         module_name = prepared_config["resource_name"]  # Assuming this is your module name
+        logger.info(f"---------- Starting deployment of {module_name} ({role}) ----------")
         outputs_file = os.path.join(cluster_dir, "outputs.tf")
-
+        
         # Define common output names
         output_names = ["cluster_name", "master_ip", "worker_ip", "ha_ip", "k3s_token"]
-
+        
         # Include additional outputs based on the cloud type
         if "aws" in cluster_dir:
             output_names.append("instance_status")
@@ -228,7 +235,7 @@ class Swarmchestrate:
             cluster_name = prepared_config["cluster_name"]
             node_name = prepared_config["resource_name"]
             logger.info(
-                f"Successfully added '{node_name}' for cluster '{cluster_name}'"
+                f"✅ Successfully added '{node_name}' for cluster '{cluster_name}'"
             )
             # Run 'tofu output -json' to get outputs
             result = subprocess.run(
@@ -249,24 +256,24 @@ class Swarmchestrate:
                 "worker_ip": outputs.get("worker_ip", {}).get("value"),
                 "ha_ip": outputs.get("ha_ip", {}).get("value"),
             }
-
             # Add cloud-specific output
             if "aws" in cluster_dir:
                 result_outputs["instance_status"] = outputs.get("instance_status", {}).get("value")
             elif "openstack" in cluster_dir:
                 result_outputs["instance_power_state"] = outputs.get("instance_power_state", {}).get("value")
 
-            logger.info(f"Terraform outputs: {result_outputs}")
+            logger.info(f"----------- Deployment of {role} node successful -----------")
+            logger.debug(f"Deployment outputs: {result_outputs}")
 
             return result_outputs
 
         except subprocess.CalledProcessError as e:
-            error_msg = f"Failed to get outputs: {e.stderr.strip()}"
+            error_msg = f"❌ Failed to get outputs: {e.stderr.strip()}"
             logger.error(error_msg)
             raise RuntimeError(error_msg)
         
         except Exception as e:
-            error_msg = f"Failed to add node: {e}"
+            error_msg = f"❌ Failed to add node: {e}"
             logger.error(error_msg)
             raise RuntimeError(error_msg)
 
@@ -318,11 +325,11 @@ class Swarmchestrate:
 
             if not dryrun:
                 logger.info(
-                    f"Successfully removed node '{resource_name}' from cluster '{cluster_name}'"
+                    f"✅ Successfully removed node '{resource_name}' from cluster '{cluster_name}'"
                 )
 
         except Exception as e:
-            error_msg = f"Failed to remove node '{resource_name}' from cluster '{cluster_name}': {str(e)}"
+            error_msg = f"❌ Failed to remove node '{resource_name}' from cluster '{cluster_name}': {str(e)}"
             logger.error(error_msg)
             raise RuntimeError(error_msg)
 
@@ -337,10 +344,10 @@ class Swarmchestrate:
         Raises:
             RuntimeError: If OpenTofu commands fail
         """
-        logger.info(f"Updating infrastructure in {cluster_dir}")
+        logger.debug(f"Updating infrastructure in {cluster_dir}")
 
         if not os.path.exists(cluster_dir):
-            error_msg = f"Cluster directory '{cluster_dir}' not found"
+            error_msg = f"❌ Cluster directory '{cluster_dir}' not found"
             logger.error(error_msg)
             raise RuntimeError(error_msg)
 
@@ -350,7 +357,7 @@ class Swarmchestrate:
 
         # Check if the environment variables are set
         if not tf_log or not tf_log_path:
-            print("Error: Missing required environment variables.")
+            print("❌ Error: Missing required environment variables.")
             exit(1)
 
         # Prepare environment variables for subprocess
@@ -371,7 +378,7 @@ class Swarmchestrate:
                 CommandExecutor.run_command(
                     ["tofu", "validate"], cluster_dir, "OpenTofu validate", env=env_vars
                 )
-                logger.info("Infrastructure successfully validated")
+                logger.info("✅ Infrastructure successfully validated")
                 return
 
             # Plan the deployment
@@ -390,7 +397,7 @@ class Swarmchestrate:
             logger.info("Infrastructure successfully updated")
 
         except RuntimeError as e:
-            error_msg = f"Failed to deploy infrastructure: {str(e)}"
+            error_msg = f"❌ Failed to deploy infrastructure: {str(e)}"
             logger.error(error_msg)
             raise RuntimeError(error_msg)
 
@@ -410,7 +417,7 @@ class Swarmchestrate:
         cluster_dir = self.get_cluster_output_dir(cluster_name)
 
         if not os.path.exists(cluster_dir):
-            error_msg = f"Cluster directory '{cluster_dir}' not found"
+            error_msg = f"❌ Cluster directory '{cluster_dir}' not found"
             logger.error(error_msg)
             raise RuntimeError(error_msg)
 
@@ -446,13 +453,13 @@ class Swarmchestrate:
 
             # Remove the cluster directory
             shutil.rmtree(cluster_dir, ignore_errors=True)
-            logger.info(f"Removed cluster directory: {cluster_dir}")
+            logger.info(f"✅ Removed cluster directory: {cluster_dir}")
 
             # Remove schema and database entry from PostgreSQL
             self.remove_cluster_schema_from_db(cluster_name)
 
         except RuntimeError as e:
-            error_msg = f"Failed to destroy cluster '{cluster_name}': {str(e)}"
+            error_msg = f"❌ Failed to destroy cluster '{cluster_name}': {str(e)}"
             logger.error(error_msg)
             raise RuntimeError(error_msg)
 
@@ -477,7 +484,7 @@ class Swarmchestrate:
                 cursor = connection.cursor()
 
                 # Define the SQL query to delete the cluster schema
-                drop_schema_query = f"DROP SCHEMA IF EXISTS {cluster_name} CASCADE"
+                drop_schema_query = f'DROP SCHEMA IF EXISTS "{cluster_name}" CASCADE'
                 cursor.execute(drop_schema_query)
 
                 # Commit the transaction
@@ -486,8 +493,8 @@ class Swarmchestrate:
                 logger.info(f"Schema for cluster '{cluster_name}' removed from the database")
 
             except psycopg2.Error as e:
-                logger.error(f"Failed to remove schema for cluster '{cluster_name}' from the database: {e}")
-                raise RuntimeError(f"Failed to remove schema for cluster '{cluster_name}' from the database")
+                logger.error(f"❌ Failed to remove schema for cluster '{cluster_name}' from the database: {e}")
+                raise RuntimeError(f" ❌Failed to remove schema for cluster '{cluster_name}' from the database")
 
             finally:
                 # Close the database connection

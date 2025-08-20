@@ -65,7 +65,7 @@ class TemplateManager:
         try:
             # Simply copy the provider config file to the cluster directory
             shutil.copy2(provider_template_path, provider_file)
-            logger.info(f"Created {cloud} provider configuration at {provider_file}")
+            logger.debug(f"Created {cloud} provider configuration at {provider_file}")
         except Exception as e:
             error_msg = f"Failed to create provider configuration: {e}"
             logger.error(error_msg)
@@ -94,7 +94,7 @@ class TemplateManager:
 
         try:
             shutil.copy2(user_data_src, user_data_dst)
-            logger.info(
+            logger.debug(
                 f"Copied user data template from {user_data_src} to {user_data_dst}"
             )
         except (OSError, shutil.Error) as e:
