@@ -165,7 +165,8 @@ resource "null_resource" "k3s_provision" {
       k3s_token    = var.k3s_token,
       master_ip    = var.master_ip,
       cluster_name = var.cluster_name,
-      public_ip    = openstack_networking_floatingip_v2.floatip_1.address
+      public_ip    = openstack_networking_floatingip_v2.floatip_1.address,
+      node_name    = "${var.cluster_name}-${var.resource_name}"
     })
     destination = "/tmp/k3s_user_data.sh"
   }

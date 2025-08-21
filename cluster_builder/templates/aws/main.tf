@@ -103,7 +103,8 @@ resource "aws_instance" "k3s_node" {
       k3s_token    = var.k3s_token,
       master_ip    = var.master_ip,
       cluster_name = var.cluster_name,
-      public_ip  = self.public_ip
+      public_ip  = self.public_ip,
+      node_name = "${var.cluster_name}-${var.resource_name}"
     })
     destination = "/tmp/k3s_user_data.sh"
   }
