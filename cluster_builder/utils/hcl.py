@@ -37,7 +37,7 @@ def add_backend_config(backend_tf_path, conn_str, schema_name):
     ) as f:  # Use "w" instead of "a" to create/overwrite the file
         f.write("\n".join(lines) + "\n")
 
-    logger.info("✅ Added PostgreSQL backend config to %s", backend_tf_path)
+    logger.debug("✅ Added PostgreSQL backend config to %s", backend_tf_path)
 
 
 def add_module_block(main_tf_path, module_name, config):
@@ -76,7 +76,7 @@ def add_module_block(main_tf_path, module_name, config):
     with open(main_tf_path, "a") as f:
         f.write("\n\n" + "\n".join(lines) + "\n")
 
-    logger.info("✅ Added module '%s' to %s", module_name, main_tf_path)
+    logger.debug("✅ Added module '%s' to %s", module_name, main_tf_path)
 
 
 def is_target_module_block(tree: Tree, module_name: str) -> bool:
@@ -272,7 +272,7 @@ def add_output_blocks(outputs_tf_path, module_name, output_names):
 
         if f'output "{output_name}"' in existing_text:
             # Check if the output block already exists in the file
-            logger.warning(f"⚠️ Output '{output_name}' already exists in {outputs_tf_path}. Checking if it needs an update.")
+            logger.debug(f"⚠️ Output '{output_name}' already exists in {outputs_tf_path}. Checking if it needs an update.")
             
             # Only update if the value is None in the current output
             if output_name in ["worker_ip", "ha_ip"] and "None" in existing_text:
@@ -281,7 +281,7 @@ def add_output_blocks(outputs_tf_path, module_name, output_names):
                 # If it's there but not the same, we need to update it
                 updated_lines.append(output_block)
             else:
-                logger.info(f"Output '{output_name}' is already correctly defined in {outputs_tf_path}.")
+                logger.debug(f"Output '{output_name}' is already correctly defined in {outputs_tf_path}.")
             continue
         else:
             # If the output doesn't exist, add it
@@ -302,6 +302,6 @@ def add_output_blocks(outputs_tf_path, module_name, output_names):
         with open(outputs_tf_path, "w") as f:
             f.write(existing_text.strip() + "\n\n" + final_output + "\n")
 
-        logger.info(f"✅ Added/updated outputs for module '{module_name}' in {outputs_tf_path}")
+        logger.debug(f"✅ Added/updated outputs for module '{module_name}'")
     else:
-        logger.warning(f"⚠️ No new outputs to add or update in {outputs_tf_path}.")
+        logger.debug(f"⚠️ No new outputs to add or update in {outputs_tf_path}.")
