@@ -433,7 +433,7 @@ class Swarmchestrate:
                 ["tofu", "plan", "-destroy", "-input=false"],
                 cluster_dir,
                 "OpenTofu plan destruction",
-                timeout=30,
+                timeout=40,
             )
 
             # Execute destruction
