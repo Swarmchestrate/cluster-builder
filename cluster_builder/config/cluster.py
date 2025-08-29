@@ -50,6 +50,7 @@ class ClusterConfig:
             A randomly generated name
         """
         name = generate_name()
+        name = name.replace("_", "-")
         logger.debug(f"Generated random name: {name}")
         return name
 
@@ -84,7 +85,7 @@ class ClusterConfig:
 
         cloud = prepared_config["cloud"]
         role = prepared_config["k3s_role"]
-        logger.info(f"Preparing configuration for cloud={cloud}, role={role}")
+        logger.debug(f"Preparing configuration for cloud={cloud}, role={role}")
 
         # Set module source path
         prepared_config["module_source"] = self.template_manager.get_module_source_path(
@@ -96,10 +97,10 @@ class ClusterConfig:
         if "cluster_name" not in prepared_config:
             cluster_name = self.generate_random_name()
             prepared_config["cluster_name"] = cluster_name
-            logger.info(f"Generated cluster name: {cluster_name}")
+            logger.info(f"Creating new cluster: {cluster_name}")
         else:
             logger.info(
-                f"Using provided cluster name: {prepared_config['cluster_name']}"
+                f"Adding node to existing cluster: {prepared_config['cluster_name']}"
             )
 
         cluster_dir = self.get_cluster_output_dir(prepared_config["cluster_name"])
@@ -107,7 +108,7 @@ class ClusterConfig:
 
         # Generate a resource name
         random_name = self.generate_random_name()
-        prepared_config["resource_name"] = f"{cloud}_{random_name}"
+        prepared_config["resource_name"] = f"{cloud}-{random_name}"
         logger.debug(f"Resource name: {prepared_config['resource_name']}")
 
         # Create the cluster directory

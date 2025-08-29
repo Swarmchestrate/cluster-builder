@@ -23,14 +23,14 @@ log_message "Using provided public IP: ${public_ip}"
 # Templated installation based on HA configuration
 if [[ "${ha}" == "true" ]]; then
     log_message "Installing in HA mode using cluster-init..."
-    curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--cluster-init --node-external-ip=${public_ip} --flannel-backend=wireguard-native --flannel-external-ip" K3S_TOKEN="${k3s_token}" sh -s - server
+    curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--cluster-init --node-external-ip=${public_ip} --node-name="${node_name}" --flannel-backend=wireguard-native --flannel-external-ip" K3S_TOKEN="${k3s_token}" sh -s - server
     if [[ $? -ne 0 ]]; then
         log_message "ERROR: Failed to install K3s in HA mode."
         exit 1
     fi
 else
     log_message "Installing in single-server mode..."
-    curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--node-external-ip=${public_ip} --flannel-backend=wireguard-native --flannel-external-ip" K3S_TOKEN="${k3s_token}" sh -s - server
+    curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--node-external-ip=${public_ip} --node-name="${node_name}" --flannel-backend=wireguard-native --flannel-external-ip" K3S_TOKEN="${k3s_token}" sh -s - server
     if [[ $? -ne 0 ]]; then
         log_message "ERROR: Failed to install K3s in single-server mode."
         exit 1

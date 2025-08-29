@@ -1,0 +1,16 @@
+{
+    "cloud": "aws",
+    "k3s_role": "master",
+    "ha": false,
+    "instance_type": "t2.small",
+    "ssh_key_name": "test",
+    "ssh_user": "ec2-user",
+    "ssh_private_key_path": "/path/to/key.pem",
+    "ami": "ami-0c0493bbac867d427",
+    // If existing SG is specified, it will be used directly with no port changes
+    "security_group_id": "sg-0123456789abcdef0",
+    // No security_group_id means a new SG will be created and these ports applied as rules
+    // These ports will be used ONLY if creating a new SG
+    "tcp_ports": [10020],
+    "udp_ports": [1003]
+}

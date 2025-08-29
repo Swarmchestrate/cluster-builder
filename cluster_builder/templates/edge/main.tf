@@ -30,6 +30,7 @@ data "template_file" "user_data" {
     ha        = var.ha
     public_ip = var.edge_device_ip
     master_ip = var.master_ip
+    node_name = "${var.cluster_name}-${var.resource_name}"
   }
 }
 

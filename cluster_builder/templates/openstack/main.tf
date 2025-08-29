@@ -165,7 +165,8 @@ resource "null_resource" "k3s_provision" {
       k3s_token    = var.k3s_token,
       master_ip    = var.master_ip,
       cluster_name = var.cluster_name,
-      public_ip    = openstack_networking_floatingip_v2.floatip_1.address
+      public_ip    = openstack_networking_floatingip_v2.floatip_1.address,
+      node_name    = "${var.cluster_name}-${var.resource_name}"
     })
     destination = "/tmp/k3s_user_data.sh"
   }
@@ -193,15 +194,15 @@ output "cluster_name" {
 }
 
 output "master_ip" {
-  value = var.k3s_role == "master" ? openstack_compute_instance_v2.k3s_node.network.0.fixed_ip_v4 : var.master_ip
+  value = var.k3s_role == "master" ? openstack_networking_floatingip_v2.floatip_1.address : var.master_ip
 }
 
 output "worker_ip" {
-  value = var.k3s_role == "worker" ? openstack_compute_instance_v2.k3s_node.network.0.fixed_ip_v4 : null
+  value = var.k3s_role == "worker" ? openstack_networking_floatingip_v2.floatip_1.address : null
 }
 
 output "ha_ip" {
-  value = var.k3s_role == "ha" ? openstack_compute_instance_v2.k3s_node.network.0.fixed_ip_v4 : null
+  value = var.k3s_role == "ha" ? openstack_networking_floatingip_v2.floatip_1.address : null
 }
 
 output "k3s_token" {
