@@ -1,6 +1,0 @@
-{
-  "cluster_name": "vigorous-panini",
-  "master_ip": "193.225.250.17",
-  "k3s_token": "PfwF42oKrvSLLSIZ",
-  "node_name": "vigorous-panini-openstack-sweet-jennings"
-}
