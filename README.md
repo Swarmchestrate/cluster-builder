@@ -1,6 +1,6 @@
 # Swarmchestrate - Cluster Builder
 
-This repository contains the codebase for **[cluster-builder]**, which builds K3s clusters for Swarmchestrate using OpenTofu.  
+This repository contains the codebase for **cluster-builder**, which builds K3s clusters for Swarmchestrate using OpenTofu.  
 
 Key features:
 - **Create**: Provisions infrastructure using OpenTofu and installs K3s.
@@ -17,11 +17,10 @@ Before proceeding, ensure the following prerequisites are installed:
 1. **Git**: For cloning the repository.
 2. **Python**: Version 3.9 or higher.
 3. **pip**: Python package manager.
-4. **OpenTofu**: Version 1.6 or higher for infrastructure provisioning.
-6. **Make**: To run the provided `Makefile`.
-7. **PostgreSQL**: For storing OpenTofu state.
-8. (Optional) **Docker**: To create a dev Postgres
-9. For detailed instructions on **edge device requirements**, refer to the [Edge Device Requirements](docs/edge-requirements.md) document.
+4. **Make**: To run the provided `Makefile`.
+5. **PostgreSQL**: For storing OpenTofu state.
+6. (Optional) **Docker**: To create a dev Postgres
+7. For detailed instructions on **edge device requirements**, refer to the [Edge Device Requirements](docs/edge-requirements.md) document.
 
 ---
 
@@ -126,16 +125,21 @@ orchestrator = Swarmchestrate(
 To create a new k3s cluster, use the **add_node** method with the **master** role:
 
 ```python
-# Configuration for a new cluster
+# Configuration for a new cluster using aws provider
 config = {
-    "cloud": "aws",  # Can be 'aws', 'openstack', or 'edge'
-    "k3s_role": "master",  # Role can be 'master', 'worker', or 'ha'
+    "cloud": "aws", 
+    "k3s_role": "master", 
     "ha": False,  # Set to True for high availability (HA) deployments
     "instance_type": "t2.small",  # AWS instance type
     "ssh_key_name": "g",  # SSH key name for AWS or OpenStack
     "ssh_user": "ec2-user",  # SSH user for the instance
     "ssh_private_key_path": "/workspaces/cluster-builder/scripts/g.pem",  # Path to SSH private key
     "ami": "ami-0c0493bbac867d427",  # AMI ID for AWS (specific to region)
+    # Optional parameters
+    # If existing SG is specified, it will be used directly with no port changes
+    "security_group_id": "sg-0123456789abcdef0",
+    # No security_group_id means a new SG will be created and these ports applied as rules
+    # These ports will be used ONLY if creating a new SG
     "tcp_ports": [10020],  # Optional list of TCP ports to open
     "udp_ports": [1003]  # Optional list of UDP ports to open
 }
@@ -145,27 +149,33 @@ cluster_name = orchestrator.add_node(config)
 print(f"Created cluster: {cluster_name}")
 ```
 
+Note: Fetch the outputs from the master node and use them when adding a worker node.
+
 ### Adding Nodes to an Existing Cluster
 
 To add worker or high-availability nodes to an existing cluster:
 
 ```python
-# Configuration for adding a worker node
+# Configuration for adding a worker node using aws provider
 worker_config = {
-    "cloud": "aws",  # Cloud provider (can be 'aws', 'openstack', or 'edge')
+    "cloud": "aws",
     "k3s_role": "worker",  # Role can be 'worker' or 'ha'
-    "ha": False,  # Set to True for high availability (HA) deployments
     "instance_type": "t2.small",  # AWS instance type
     "ssh_key_name": "g",  # SSH key name
     "ssh_user": "ec2-user",  # SSH user for the instance
     "ssh_private_key_path": "/workspaces/cluster-builder/scripts/g.pem",  # Path to SSH private key
     "ami": "ami-0c0493bbac867d427",  # AMI ID for AWS
-    # Optional parameters:
-    # "master_ip": "12.13.14.15",  # IP address of the master node (required for worker/HA roles)
-    # "cluster_name": "elastic_mcnulty",  # Name of the cluster
-    # "security_group_id": "sg-xxxxxxxxxxxxxxx",  # Security group ID for AWS or OpenStack
-    # "tcp_ports": [80, 443],  # List of TCP ports to open
-    # "udp_ports": [53]  # List of UDP ports to open
+    # Additional parameters obtained after deploying the master node:
+    "master_ip": "12.13.14.15",  # IP address of the master node (required for worker/HA roles)
+    "cluster_name": "elastic_mcnulty",  # Name of the cluster
+    "k3s_token": "G4lm7wEaFuCCygeU", # Token of the cluster
+    # Optional parameters
+    # If existing SG is specified, it will be used directly with no port changes
+    "security_group_id": "sg-0123456789abcdef0",
+    # No security_group_id means a new SG will be created and these ports applied as rules
+    # These ports will be used ONLY if creating a new SG
+    "tcp_ports": [10020],  # Optional list of TCP ports to open
+    "udp_ports": [1003]  # Optional list of UDP ports to open
 }
 
 # Add the worker node
@@ -210,17 +220,25 @@ Note for **Edge Devices**:
 Since the edge device is already provisioned, the `destroy` method will not remove K3s directly from the edge device. You will need to manually uninstall K3s from your edge device after the cluster is destroyed.
 
 ---
+### Deploying Manifests
 
-### Important Configuration Requirements
-#### High Availability Flag (ha):
+The deploy_manifests method copies Kubernetes manifests to the target cluster node.
 
-- For k3s_role="worker" or k3s_role="ha", you must specify a master_ip (the IP address of the master node).
+```python
+orchestrator.deploy_manifests(
+    manifest_folder="path/to/manifests",
+    master_ip="MASTER_NODE_IP",
+    ssh_key_path="path/to/key.pem",
+    ssh_user="USERNAME"
+)
+```
 
-- For k3s_role="master", you must not specify a master_ip.
+## Important Configuration Requirements
+### High Availability Flag (ha):
 
 - The ha flag should be set to True for high availability deployment (usually when adding a ha or worker node to an existing master).
 
-#### SSH Credentials:
+### SSH Credentials:
 
 - For all roles (k3s_role="master", k3s_role="worker", k3s_role="ha"), you must specify both ssh_user and ssh_private_key_path except for edge.
 
@@ -228,7 +246,7 @@ Since the edge device is already provisioned, the `destroy` method will not remo
 
 - The ssh_key_name and the ssh_private_key_path are different—ensure that your SSH key is placed correctly at the provided ssh_private_key_path.
 
-#### Ports:
+### Ports:
 You can specify custom ports for your nodes in the tcp_ports and udp_ports fields. However, certain ports are required for Kubernetes deployment (even if not specified explicitly):
 
 **TCP Ports:**
@@ -247,7 +265,7 @@ You can specify custom ports for your nodes in the tcp_ports and udp_ports field
 - 8472: VXLAN for Flannel
 - 53: DNS
 
-#### OpenStack:
+### OpenStack:
 When provisioning on OpenStack, you should provide the value for 'floating_ip_pool' from which floating IPs can be allocated for the instance. If not specified, OpenTofu will not assign floating IP.
 
 ---

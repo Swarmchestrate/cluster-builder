@@ -113,7 +113,7 @@ resource "openstack_networking_port_secgroup_associate_v2" "port_2" {
 resource "openstack_compute_instance_v2" "k3s_node" {
   depends_on = [openstack_networking_port_v2.port_1] 
 
-  name             = "${var.cluster_name}-${var.resource_name}"
+  name             = "${var.resource_name}"
   flavor_name      = var.openstack_flavor_id
   key_pair         = var.ssh_key_name
  # Only add the image_id if block device is NOT used
@@ -136,7 +136,7 @@ resource "openstack_compute_instance_v2" "k3s_node" {
   }
 
   tags = [
-    "${var.cluster_name}-${var.resource_name}",
+    "${var.resource_name}",
     "ClusterName=${var.cluster_name}",
     "Role=${var.k3s_role}"
   ]
@@ -166,7 +166,7 @@ resource "null_resource" "k3s_provision" {
       master_ip    = var.master_ip,
       cluster_name = var.cluster_name,
       public_ip    = openstack_networking_floatingip_v2.floatip_1.address,
-      node_name    = "${var.cluster_name}-${var.resource_name}"
+      resource_name    = "${var.resource_name}"
     })
     destination = "/tmp/k3s_user_data.sh"
   }
@@ -213,6 +213,6 @@ output "instance_power_state" {
   value = openstack_compute_instance_v2.k3s_node.power_state
 }
 
-output "node_name" {
+output "resource_name" {
   value = openstack_compute_instance_v2.k3s_node.name
 }

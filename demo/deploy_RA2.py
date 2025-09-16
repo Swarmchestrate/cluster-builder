@@ -29,9 +29,9 @@ for node in cluster_config["nodes"]:
     outputs = swarmchestrate.add_node(node)
 
     # Retrieve outputs
-    node_name = outputs.get("node_name")
+    resource_name = outputs.get("resource_name")
     worker_ip = outputs.get("worker_ip")
 
 logger.info(f"[INFO] Cluster {cluster_name} updated with worker nodes from this RA.")
 logger.info(f"[INFO] Worker IP: {worker_ip}")
-logger.info(f"[INFO] Worker Node name: {node_name}")
+logger.info(f"[INFO] Worker Node name: {resource_name}")

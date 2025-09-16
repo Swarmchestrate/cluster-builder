@@ -131,9 +131,12 @@ class ClusterConfig:
         logger.debug(f"Cluster directory: {cluster_dir}")
 
         # Generate a resource name
-        random_name = self.generate_random_name()
-        prepared_config["resource_name"] = f"{cloud}-{random_name}"
-        logger.debug(f"Resource name: {prepared_config['resource_name']}")
+        if "resource_name" not in prepared_config:
+            random_name = self.generate_random_name()
+            prepared_config["resource_name"] = f"{cloud}-{random_name}"
+            logger.debug(f"Resource name: {prepared_config['resource_name']}")
+        else:
+            logger.debug(f" USing provded Resource name: {prepared_config['resource_name']}")
 
         # Create the cluster directory
         try:

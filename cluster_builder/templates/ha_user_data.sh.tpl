@@ -21,7 +21,7 @@ log_message "Installing K3s HA Server and joining the cluster..."
 if ! curl -sfL https://get.k3s.io | K3S_TOKEN="${k3s_token}" sh -s - server \
     --server "https://${master_ip}:6443" \
     --node-external-ip="${public_ip}" \
-    --node-name="${node_name}" \
+    --node-name="${resource_name}" \
     --flannel-backend=wireguard-native \
     --flannel-external-ip; then
     log_message "ERROR: K3s server installation failed!"

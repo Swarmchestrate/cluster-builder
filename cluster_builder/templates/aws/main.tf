@@ -91,7 +91,7 @@ resource "aws_instance" "k3s_node" {
   vpc_security_group_ids = var.security_group_id != "" ? [var.security_group_id] : [aws_security_group.k3s_sg[0].id]
 
   tags = {
-    Name        = "${var.cluster_name}-${var.resource_name}"
+    Name        = "${var.resource_name}"
     ClusterName = var.cluster_name
     Role        = var.k3s_role
   }
@@ -104,7 +104,7 @@ resource "aws_instance" "k3s_node" {
       master_ip    = var.master_ip,
       cluster_name = var.cluster_name,
       public_ip  = self.public_ip,
-      node_name = "${var.cluster_name}-${var.resource_name}"
+      resource_name = "${var.resource_name}"
     })
     destination = "/tmp/k3s_user_data.sh"
   }
@@ -151,6 +151,6 @@ output "instance_status" {
   value = aws_instance.k3s_node.id
 }
 
-output "node_name" {
+output "resource_name" {
   value = aws_instance.k3s_node.tags["Name"]
 }

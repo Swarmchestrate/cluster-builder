@@ -30,7 +30,7 @@ data "template_file" "user_data" {
     ha        = var.ha
     public_ip = var.edge_device_ip
     master_ip = var.master_ip
-    node_name = "${var.cluster_name}-${var.resource_name}"
+    resource_name = "${var.resource_name}"
   }
 }
 
@@ -63,7 +63,7 @@ resource "null_resource" "deploy_k3s_edge" {
   }
 
   triggers = {
-    Name          = "K3s-${var.k3s_role}-${var.cluster_name}-${var.resource_name}"
+    Name          = "${var.resource_name}"
     cluster_name  = var.cluster_name
     role          = var.k3s_role
     resource_name = var.resource_name
@@ -93,6 +93,6 @@ output "k3s_token" {
   value = var.k3s_token
 }
 
-output "node_name" {
-  value = "${var.cluster_name}-${var.resource_name}"
+output "resource_name" {
+  value = "var.resource_name}"
 }

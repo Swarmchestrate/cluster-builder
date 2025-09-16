@@ -27,10 +27,17 @@ resource "null_resource" "copy_manifests" {
     destination = "/home/${var.ssh_user}"
   }
 
-  # Apply manifests using K3s kubeconfig
+  # Apply namespace.yaml first
   provisioner "remote-exec" {
     inline = [
-    "sudo -E KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl apply -R -f /home/ubuntu/manifests/"
-  ]
+      "sudo -E KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl apply -f /home/${var.ssh_user}/manifests/namespace.yaml"
+    ]
+  }
+
+  # Apply the rest of the manifests
+  provisioner "remote-exec" {
+    inline = [
+      "sudo -E KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl apply -R -f /home/${var.ssh_user}/manifests/ --selector='!namespace.yaml'"
+    ]
   }
 }

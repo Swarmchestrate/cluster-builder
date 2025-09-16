@@ -23,7 +23,7 @@ else
     export K3S_TOKEN="${k3s_token}"
 
     # Install the K3s agent and join the cluster
-    if ! curl -sfL https://get.k3s.io | sh -s - agent --node-external-ip="${public_ip}" --node-name="${node_name}"; then
+    if ! curl -sfL https://get.k3s.io | sh -s - agent --node-external-ip="${public_ip}" --node-name="${resource_name}"; then
         log_message "ERROR: K3s agent installation failed!"
         exit 1
     else
