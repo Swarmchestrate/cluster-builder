@@ -521,11 +521,11 @@ class Swarmchestrate:
                     connection.close()
 
     def run_copy_manifests_tf(
-    self,
-    manifest_folder: str,
-    master_ip: str,
-    ssh_key_path: str,
-    ssh_user: str,
+        self,
+        manifest_folder: str,
+        master_ip: str,
+        ssh_key_path: str,
+        ssh_user: str,
     ):
         """
         Copy and apply manifests to a cluster using copy_manifest.tf in a separate folder.
@@ -549,12 +549,6 @@ class Swarmchestrate:
         shutil.copy(tf_source_file, copy_dir)
         logger.info(f"Copied copy_manifest.tf to {copy_dir}")
 
-        # Optionally copy variables.tf if exists
-        variables_file = Path(self.template_manager.templates_dir) / "variables.tf"
-        if variables_file.exists():
-            shutil.copy(variables_file, copy_dir)
-            logger.info(f"Copied variables.tf to {copy_dir}")
-
         # Prepare environment for OpenTofu
         env_vars = os.environ.copy()
         env_vars["TF_LOG"] = os.getenv("TF_LOG", "INFO")
@@ -565,7 +559,7 @@ class Swarmchestrate:
             logger.info(f"Initializing OpenTofu in {copy_dir}...")
             subprocess.run(["tofu", "init"], cwd=copy_dir, check=True, env=env_vars)
 
-            # Apply only the copy-manifest resource
+            # Apply the copy-manifest resource
             logger.info(f"Applying copy-manifest resource in {copy_dir}...")
             cmd = [
                 "tofu",
@@ -578,13 +572,16 @@ class Swarmchestrate:
             ]
             result = subprocess.run(cmd, cwd=copy_dir, check=True, capture_output=True, text=True, env=env_vars)
 
-            logger.info(result.stdout)
+            # Log output
+            if result.stdout:
+                logger.info(result.stdout)
             if result.stderr:
-                logger.error(result.stderr)
+                logger.warning(result.stderr)
 
-            logger.info("✅ Copy-manifest applied successfully.")
+            logger.info("✅ Copy-manifest applied successfully on master node.")
 
         except subprocess.CalledProcessError as e:
-            error_msg = f"Error applying copy-manifest: {e.stderr}"
+            error_msg = f"Error applying copy-manifest on master {master_ip}: {e.stderr or e.stdout}"
             logger.error(error_msg)
             raise RuntimeError(error_msg)
+
