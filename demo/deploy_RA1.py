@@ -32,3 +32,5 @@ for node in cluster_config["nodes"]:
     node_name = outputs.get("node_name")
     worker_ip = outputs.get("worker_ip")
 logger.info(f"[INFO] Cluster {cluster_name} updated with nodes from this RA.") 
+logger.info(f"[INFO] Worker IP: {worker_ip}")
+logger.info(f"[INFO] Worker Node name: {node_name}")
