@@ -92,3 +92,7 @@ output "ha_ip" {
 output "k3s_token" {
   value = var.k3s_token
 }
+
+output "node_name" {
+  value = "${var.cluster_name}-${var.resource_name}"
+}

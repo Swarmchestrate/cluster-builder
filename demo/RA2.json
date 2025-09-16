@@ -1,0 +1,11 @@
+{
+  "nodes": [
+    {
+      "cloud": "edge", 
+      "edge_device_ip": "18.130.228.103",
+      "ssh_user": "ubuntu",
+      "ssh_auth_method": "key",
+      "ssh_private_key": "/workspaces/cluster-builder/scripts/g.pem",
+      "k3s_role": "worker"
+    }
+]}

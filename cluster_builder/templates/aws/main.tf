@@ -150,3 +150,7 @@ output "k3s_token" {
 output "instance_status" {
   value = aws_instance.k3s_node.id
 }
+
+output "node_name" {
+  value = aws_instance.k3s_node.tags["Name"]
+}

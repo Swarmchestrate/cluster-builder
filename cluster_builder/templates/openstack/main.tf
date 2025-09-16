@@ -212,3 +212,7 @@ output "k3s_token" {
 output "instance_power_state" {
   value = openstack_compute_instance_v2.k3s_node.power_state
 }
+
+output "node_name" {
+  value = openstack_compute_instance_v2.k3s_node.name
+}
