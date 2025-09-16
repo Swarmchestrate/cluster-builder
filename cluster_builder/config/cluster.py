@@ -4,7 +4,8 @@ Cluster configuration management.
 
 import os
 import logging
-
+import secrets
+import string
 from names_generator import generate_name
 
 from cluster_builder.infrastructure import TemplateManager
@@ -54,6 +55,21 @@ class ClusterConfig:
         logger.debug(f"Generated random name: {name}")
         return name
 
+    def generate_k3s_token(self, length: int = 16) -> str:
+        """
+        Generate a secure random alphanumeric token for K3s.
+
+        Args:
+            length: Length of the token (default: 16)
+
+        Returns:
+            A secure, randomly generated alphanumeric token
+        """
+        chars = string.ascii_letters + string.digits
+        token = ''.join(secrets.choice(chars) for _ in range(length))
+        logger.debug(f"Generated K3s token: {token}")
+        return token
+
     def prepare(self, config: dict[str, any]) -> tuple[str, dict[str, any]]:
         """
         Prepare the configuration and template files for deployment.
@@ -92,6 +108,14 @@ class ClusterConfig:
             cloud
         )
         logger.debug(f"Using module source: {prepared_config['module_source']}")
+
+        # create k3s-token if not provided
+        if "k3s_token" not in prepared_config:
+            logger.debug("Generating k3s token for cluster")
+            k3s_token = self.generate_k3s_token()
+            prepared_config["k3s_token"] = k3s_token
+        else:
+            logger.debug(f"Using provided K3s token: {prepared_config['k3s_token']}")
 
         # Generate a cluster name if not provided
         if "cluster_name" not in prepared_config:

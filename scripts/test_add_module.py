@@ -6,9 +6,9 @@ module_name = "worker_xyz132"
 
 # Config dictionary containing both cluster and module specific data
 config = {
-    "module_source": "/opt/modules/aws_node",
-    "cluster_name": "cluster-a",
-    "k3s_role": "worker",
+    "module_source": "/workspaces/cluster-builder/cluster_builder/templates/aws",
+    "cluster_name": "quizzical_shamir",
+    "k3s_role": "master",
     "random_name": "xyz123",
     "aws_region": "eu-west-2",
     "aws_access_key": "AKIA...",

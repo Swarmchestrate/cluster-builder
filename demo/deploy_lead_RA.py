@@ -1,6 +1,6 @@
 import json
 from cluster_builder import Swarmchestrate
-from .utils import write_outputs
+from demo.utils import write_outputs
 import logging
 
 logger = logging.getLogger("demo_RA")
@@ -18,6 +18,7 @@ outputs = swarmchestrate.add_node(master_node)
 k3s_token = outputs.get("k3s_token")
 cluster_name = outputs.get("cluster_name")
 master_ip = outputs.get("master_ip")
+node_name = outputs.get("node_name")
 
 if not master_ip:
     logger.error("❌ Could not retrieve master IP from outputs for cluster '%s'", cluster_name or "unknown")
@@ -25,7 +26,7 @@ if not master_ip:
 
 logger.info(f"[INFO] Cluster name: {cluster_name}")
 logger.info(f"[INFO] Master IP: {master_ip}")
-
+logger.info(f"[INFO] Master Node name: {node_name}")
 # after deployment
-write_outputs(cluster_name, master_ip, k3s_token)
-logger.info(f"[INFO] Saved outputs for cluster: {cluster_name}")
+write_outputs(cluster_name, master_ip, k3s_token, node_name)
+logger.info(f"[INFO] Saved outputs for cluster: {cluster_name} in file")

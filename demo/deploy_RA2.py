@@ -1,6 +1,6 @@
 import json
 from cluster_builder import Swarmchestrate
-from .utils import read_outputs
+from demo.utils import read_outputs
 import logging
 
 logger = logging.getLogger("demo_RA2")
@@ -26,6 +26,10 @@ for node in cluster_config["nodes"]:
         "cluster_name": cluster_name,
     })
     logger.info(f"[INFO] Deploying {node['k3s_role']} node on cloud: {node['cloud']}")
-    swarmchestrate.add_node(node)
+    outputs = swarmchestrate.add_node(node)
+
+    # Retrieve outputs
+    node_name = outputs.get("node_name")
+    worker_ip = outputs.get("worker_ip")
 
 logger.info(f"[INFO] Cluster {cluster_name} updated with worker nodes from this RA.")

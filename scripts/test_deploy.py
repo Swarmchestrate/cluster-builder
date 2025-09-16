@@ -1,5 +1,5 @@
 # Import your AWS or OpenStack configuration
-from config import aws_config
+from .config import aws_config
 from cluster_builder import Swarmchestrate
 
 # aws_config["cluster_name"] = "crazy_wescoff"

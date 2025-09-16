@@ -5,6 +5,7 @@ Swarmchestrate - Main orchestration class for K3s cluster management.
 import json
 import os
 import logging
+from pathlib import Path
 import shutil
 import subprocess
 from typing import Optional
@@ -211,12 +212,12 @@ class Swarmchestrate:
         role = prepared_config["k3s_role"]
         
         # Add output blocks for the module you just added
-        module_name = prepared_config["resource_name"]  # Assuming this is your module name
+        module_name = prepared_config["resource_name"]
         logger.info(f"---------- Starting deployment of {module_name} ({role}) ----------")
         outputs_file = os.path.join(cluster_dir, "outputs.tf")
         
         # Define common output names
-        output_names = ["cluster_name", "master_ip", "worker_ip", "ha_ip", "k3s_token"]
+        output_names = ["cluster_name", "master_ip", "worker_ip", "ha_ip", "k3s_token", "node_name"]
         
         # Include additional outputs based on the cloud type
         if "aws" in cluster_dir:
@@ -255,6 +256,7 @@ class Swarmchestrate:
                 "k3s_token": outputs.get("k3s_token", {}).get("value"),
                 "worker_ip": outputs.get("worker_ip", {}).get("value"),
                 "ha_ip": outputs.get("ha_ip", {}).get("value"),
+                "node_name": outputs.get("node_name", {}).get("value")
             }
             # Add cloud-specific output
             if "aws" in cluster_dir:
@@ -279,7 +281,7 @@ class Swarmchestrate:
 
 
     def remove_node(
-        self, cluster_name: str, resource_name: str, dryrun: bool = False
+        self, cluster_name: str, resource_name: str, is_edge: bool = False, dryrun: bool = False
     ) -> None:
         """
         Remove a specific node from a cluster.
@@ -289,14 +291,15 @@ class Swarmchestrate:
         reapplying the configuration.
 
         Args:
-            cluster_name: Name of the cluster containing the node
-            resource_name: Resource name of the node to remove
-            dryrun: If True, only validate the changes without applying
+            cluster_name: Name of the cluster
+            resource_name: Node name in K3s and module name in main.tf / OpenTofu
+            is_edge: True if the node is pre-provisioned (edge node)
+            dryrun: If True, only simulate actions without executing
 
         Raises:
             RuntimeError: If node removal fails
         """
-        logger.info(f"Removing node '{resource_name}' from cluster '{cluster_name}'...")
+        logger.info(f"------------ Removing node '{resource_name}' from cluster '{cluster_name}' ------------")
 
         # Get the directory for the specified cluster
         cluster_dir = self.get_cluster_output_dir(cluster_name)
@@ -315,18 +318,39 @@ class Swarmchestrate:
             raise RuntimeError(error_msg)
 
         try:
-            # Remove the module block for the specified resource
+            # Destroy VM only if cloud node (optional)
+            if not is_edge:
+                tofu_resource = f"opentofu_aws_instance.{resource_name}"
+                if not dryrun:
+                    CommandExecutor.run_command(
+                        ["tofu", "destroy", "-target", tofu_resource, "-auto-approve"],
+                        cwd=cluster_dir,
+                        description=f"Destroying VM for node {resource_name}",
+                    )
+                else:
+                    logger.info(f"Dryrun: would destroy VM for node '{resource_name}' (cloud node)")
+
+            # Remove module block from main.tf
             hcl.remove_module_block(main_tf_path, resource_name)
-            logger.info(
-                f"Removed module block for '{resource_name}' from {main_tf_path}"
-            )
+            logger.info(f"Removed module block for '{resource_name}' from {main_tf_path}")
 
-            self.deploy(cluster_dir, dryrun)
+            # Delete outputs.tf entirely (optional, safer for decentralized setup)
+            outputs_tf_path = os.path.join(cluster_dir, "outputs.tf")
+            if os.path.exists(outputs_tf_path):
+                os.remove(outputs_tf_path)
+                logger.info(f"Deleted outputs.tf before applying changes to remove '{resource_name}'")
 
+            # Apply OpenTofu configuration to update state
             if not dryrun:
-                logger.info(
-                    f"✅ Successfully removed node '{resource_name}' from cluster '{cluster_name}'"
+                CommandExecutor.run_command(
+                    ["tofu", "apply", "-auto-approve"],
+                    cwd=cluster_dir,
+                    description=f"Applying OpenTofu configuration after removing node {resource_name}",
                 )
+            else:
+                logger.info(f"Dryrun: would apply OpenTofu configuration after removing node '{resource_name}'")
+
+            logger.info(f"✅ Node '{resource_name}' removed successfully from cluster '{cluster_name}'")
 
         except Exception as e:
             error_msg = f"❌ Failed to remove node '{resource_name}' from cluster '{cluster_name}': {str(e)}"
@@ -411,7 +435,7 @@ class Swarmchestrate:
         Raises:
             RuntimeError: If destruction fails
         """
-        logger.info(f"Destroying the K3s cluster '{cluster_name}'...")
+        logger.info(f"---------- Destroying the cluster '{cluster_name}' -----------")
 
         # Get the directory for the specified cluster
         cluster_dir = self.get_cluster_output_dir(cluster_name)
@@ -422,7 +446,7 @@ class Swarmchestrate:
             raise RuntimeError(error_msg)
 
         if dryrun:
-            logger.info("Dryrun: will only delete")
+            logger.info("Dryrun: will only delete cluster")
             shutil.rmtree(cluster_dir, ignore_errors=True)
             return
 
@@ -483,6 +507,7 @@ class Swarmchestrate:
                 connection.commit()
 
                 logger.info(f"Schema for cluster '{cluster_name}' removed from the database")
+                logger.info(f"----------- Destruction of cluster '{cluster_name}' successful -----------")
 
             except psycopg2.Error as e:
                 logger.error(f"❌ Failed to remove schema for cluster '{cluster_name}' from the database: {e}")
@@ -494,3 +519,69 @@ class Swarmchestrate:
                     cursor.close()
                 if connection:
                     connection.close()
+
+    def run_copy_manifests_tf(
+        self,
+        manifest_folder: str,
+        master_ip: str,
+        ssh_key_path: str,
+        ssh_user: str,
+    ):
+        """
+        Copy and apply manifests to a cluster using copy_manifest.tf in a separate folder.
+
+        Args:
+            manifest_folder: Path to local manifest folder
+            master_ip: IP address of K3s master
+            ssh_key_path: Path to SSH private key
+            ssh_user: SSH username to connect to the master node
+        """
+        # Dedicated folder for copy-manifest operations
+        copy_dir = Path(self.output_dir) / "copy-manifest"
+        copy_dir.mkdir(parents=True, exist_ok=True)
+        logger.info(f"Using separate copy-manifest folder: {copy_dir}")
+
+        # Copy copy_manifest.tf from templates
+        tf_source_file = Path(self.template_manager.templates_dir) / "copy_manifest.tf"
+        if not tf_source_file.exists():
+            logger.error(f"copy_manifest.tf not found at: {tf_source_file}")
+            raise RuntimeError(f"copy_manifest.tf not found at: {tf_source_file}")
+        shutil.copy(tf_source_file, copy_dir)
+        logger.info(f"Copied copy_manifest.tf to {copy_dir}")
+
+        # Prepare environment for OpenTofu
+        env_vars = os.environ.copy()
+        env_vars["TF_LOG"] = os.getenv("TF_LOG", "INFO")
+        env_vars["TF_LOG_PATH"] = os.getenv("TF_LOG_PATH", "/tmp/opentofu.log")
+
+        try:
+            # Initialize OpenTofu in the separate folder
+            logger.info(f"Initializing OpenTofu in {copy_dir}...")
+            subprocess.run(["tofu", "init"], cwd=copy_dir, check=True, env=env_vars)
+
+            # Apply the copy-manifest resource
+            logger.info(f"Applying copy-manifest resource in {copy_dir}...")
+            cmd = [
+                "tofu",
+                "apply",
+                "-auto-approve",
+                f"-var=manifest_folder={manifest_folder}",
+                f"-var=master_ip={master_ip}",
+                f"-var=ssh_private_key_path={ssh_key_path}",
+                f"-var=ssh_user={ssh_user}"
+            ]
+            result = subprocess.run(cmd, cwd=copy_dir, check=True, capture_output=True, text=True, env=env_vars)
+
+            # Log output
+            if result.stdout:
+                logger.info(result.stdout)
+            if result.stderr:
+                logger.warning(result.stderr)
+
+            logger.info("✅ Copy-manifest applied successfully on master node.")
+
+        except subprocess.CalledProcessError as e:
+            error_msg = f"Error applying copy-manifest on master {master_ip}: {e.stderr or e.stdout}"
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
+
