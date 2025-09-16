@@ -217,7 +217,7 @@ class Swarmchestrate:
         outputs_file = os.path.join(cluster_dir, "outputs.tf")
         
         # Define common output names
-        output_names = ["cluster_name", "master_ip", "worker_ip", "ha_ip", "k3s_token", "node_name"]
+        output_names = ["cluster_name", "master_ip", "worker_ip", "ha_ip", "k3s_token", "resource_name"]
         
         # Include additional outputs based on the cloud type
         if "aws" in cluster_dir:
@@ -234,9 +234,9 @@ class Swarmchestrate:
         try:
             self.deploy(cluster_dir, dryrun)
             cluster_name = prepared_config["cluster_name"]
-            node_name = prepared_config["resource_name"]
+            resource_name = prepared_config["resource_name"]
             logger.info(
-                f"✅ Successfully added '{node_name}' for cluster '{cluster_name}'"
+                f"✅ Successfully added '{resource_name}' for cluster '{cluster_name}'"
             )
             # Run 'tofu output -json' to get outputs
             result = subprocess.run(
@@ -256,7 +256,7 @@ class Swarmchestrate:
                 "k3s_token": outputs.get("k3s_token", {}).get("value"),
                 "worker_ip": outputs.get("worker_ip", {}).get("value"),
                 "ha_ip": outputs.get("ha_ip", {}).get("value"),
-                "node_name": outputs.get("node_name", {}).get("value")
+                "resource_name": outputs.get("resource_name", {}).get("value")
             }
             # Add cloud-specific output
             if "aws" in cluster_dir:
@@ -520,7 +520,7 @@ class Swarmchestrate:
                 if connection:
                     connection.close()
 
-    def run_copy_manifests_tf(
+    def deploy_manifests(
         self,
         manifest_folder: str,
         master_ip: str,
@@ -528,7 +528,7 @@ class Swarmchestrate:
         ssh_user: str,
     ):
         """
-        Copy and apply manifests to a cluster using copy_manifest.tf in a separate folder.
+        Copy and apply manifests to a cluster using copy_manifest.tf in a temporaryfolder.
 
         Args:
             manifest_folder: Path to local manifest folder
@@ -539,49 +539,55 @@ class Swarmchestrate:
         # Dedicated folder for copy-manifest operations
         copy_dir = Path(self.output_dir) / "copy-manifest"
         copy_dir.mkdir(parents=True, exist_ok=True)
-        logger.info(f"Using separate copy-manifest folder: {copy_dir}")
 
-        # Copy copy_manifest.tf from templates
-        tf_source_file = Path(self.template_manager.templates_dir) / "copy_manifest.tf"
-        if not tf_source_file.exists():
-            logger.error(f"copy_manifest.tf not found at: {tf_source_file}")
-            raise RuntimeError(f"copy_manifest.tf not found at: {tf_source_file}")
-        shutil.copy(tf_source_file, copy_dir)
-        logger.info(f"Copied copy_manifest.tf to {copy_dir}")
-
-        # Prepare environment for OpenTofu
-        env_vars = os.environ.copy()
-        env_vars["TF_LOG"] = os.getenv("TF_LOG", "INFO")
-        env_vars["TF_LOG_PATH"] = os.getenv("TF_LOG_PATH", "/tmp/opentofu.log")
+        logger.debug(f"Using copy-manifest folder: {copy_dir}")
 
         try:
-            # Initialize OpenTofu in the separate folder
-            logger.info(f"Initializing OpenTofu in {copy_dir}...")
-            subprocess.run(["tofu", "init"], cwd=copy_dir, check=True, env=env_vars)
+            # Copy copy_manifest.tf from templates
+            tf_source_file = Path(self.template_manager.templates_dir) / "deploy_manifest.tf"
+            if not tf_source_file.exists():
+                logger.debug(f"deploy_manifest.tf not found at: {tf_source_file}")
+                raise RuntimeError(f"deploy_manifest.tf not found at: {tf_source_file}")
+            shutil.copy(tf_source_file, copy_dir)
+            logger.debug(f"Copied copy_manifest.tf to {copy_dir}")
 
-            # Apply the copy-manifest resource
-            logger.info(f"Applying copy-manifest resource in {copy_dir}...")
-            cmd = [
-                "tofu",
-                "apply",
-                "-auto-approve",
-                f"-var=manifest_folder={manifest_folder}",
-                f"-var=master_ip={master_ip}",
-                f"-var=ssh_private_key_path={ssh_key_path}",
-                f"-var=ssh_user={ssh_user}"
-            ]
-            result = subprocess.run(cmd, cwd=copy_dir, check=True, capture_output=True, text=True, env=env_vars)
+            # Prepare environment for OpenTofu
+            env_vars = os.environ.copy()
+            env_vars["TF_LOG"] = os.getenv("TF_LOG", "INFO")
+            env_vars["TF_LOG_PATH"] = os.getenv("TF_LOG_PATH", "/tmp/opentofu.log")
 
-            # Log output
-            if result.stdout:
-                logger.info(result.stdout)
-            if result.stderr:
-                logger.warning(result.stderr)
+            logger.info(f"------------ Applying manifest on node: {master_ip} -------------------")
 
-            logger.info("✅ Copy-manifest applied successfully on master node.")
+            # Run tofu init with spinner
+            CommandExecutor.run_command(
+                ["tofu", "init"],
+                cwd=str(copy_dir),
+                description="OpenTofu init",
+                env=env_vars,
+            )
 
-        except subprocess.CalledProcessError as e:
-            error_msg = f"Error applying copy-manifest on master {master_ip}: {e.stderr or e.stdout}"
-            logger.error(error_msg)
-            raise RuntimeError(error_msg)
+            # Run tofu apply with spinner
+            CommandExecutor.run_command(
+                [
+                    "tofu",
+                    "apply",
+                    "-auto-approve",
+                    f"-var=manifest_folder={manifest_folder}",
+                    f"-var=master_ip={master_ip}",
+                    f"-var=ssh_private_key_path={ssh_key_path}",
+                    f"-var=ssh_user={ssh_user}"
+                ],
+                cwd=str(copy_dir),
+                description="OpenTofu apply",
+                env=env_vars,
+            )
 
+            logger.info("------------ Successfully applied manifests -------------------")
+
+        except RuntimeError as e:
+            print(f"\n---------- ERROR ----------\n{e}\n")
+            raise
+
+        finally:
+            if copy_dir.exists():
+                shutil.rmtree(copy_dir)
