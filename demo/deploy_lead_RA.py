@@ -1,6 +1,6 @@
 import json
 from cluster_builder import Swarmchestrate
-from .utils import write_outputs
+from demo.utils import write_outputs
 import logging
 
 logger = logging.getLogger("demo_RA")
