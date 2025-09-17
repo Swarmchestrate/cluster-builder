@@ -13,31 +13,25 @@ resource "null_resource" "copy_manifests" {
     host        = var.master_ip
   }
 
-  # Ensure the manifests folder exists on the remote host
-  provisioner "remote-exec" {
-    inline = [
-      "mkdir -p /home/${var.ssh_user}/manifests",
-      "sudo chmod 755 /home/${var.ssh_user}/manifests"
-    ]
-  }
-
-  # Copy the manifests
+  # Copy the manifest folder into /tmp
   provisioner "file" {
     source      = var.manifest_folder
-    destination = "/home/${var.ssh_user}"
+    destination = "/tmp/"
   }
 
-  # Apply namespace.yaml first
+  # Apply namespace.yaml first if exists
   provisioner "remote-exec" {
     inline = [
-      "sudo -E KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl apply -f /home/${var.ssh_user}/manifests/namespace.yaml"
+      "folder_name=$(basename ${var.manifest_folder})",
+      "if [ -f /tmp/$folder_name/namespace.yaml ]; then sudo -E KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl apply -f /tmp/$folder_name/namespace.yaml; fi"
     ]
   }
 
   # Apply the rest of the manifests
   provisioner "remote-exec" {
     inline = [
-      "sudo -E KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl apply -R -f /home/${var.ssh_user}/manifests/ --selector='!namespace.yaml'"
+      "folder_name=$(basename ${var.manifest_folder})",
+      "sudo -E KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl apply -R -f /tmp/$folder_name"
     ]
   }
 }
