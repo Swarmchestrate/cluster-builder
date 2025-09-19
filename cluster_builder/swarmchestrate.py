@@ -591,3 +591,107 @@ class Swarmchestrate:
         finally:
             if copy_dir.exists():
                 shutil.rmtree(copy_dir)
+
+    def create_registry_secrets(self, cluster_config: dict):
+        """
+        Create Docker registry secrets in Kubernetes using OpenTofu.
+
+        :param cluster_config: dict with keys:
+            {
+                "master_ip": "1.2.3.4",
+                "ssh_user": "ubuntu",
+                "ssh_private_key_path": "/path/to/key.pem",
+                "namespace": "optional-namespace",
+                "secret_names": ["optional-name1", "optional-name2"]
+            }
+        """
+        load_dotenv()
+
+        # Read registry creds from env
+        registries = os.getenv("DOCKER_REGISTRIES", "").split(",")
+        usernames = os.getenv("DOCKER_USERNAMES", "").split(",")
+        passwords = os.getenv("DOCKER_PASSWORDS", "").split(",")
+
+        if not (len(registries) == len(usernames) == len(passwords)):
+            raise RuntimeError("Mismatch in registry, username, and password counts")
+
+        # Get cluster connection from method input
+        master_ip = cluster_config.get("master_ip")
+        ssh_user = cluster_config.get("ssh_user")
+        ssh_key_path = cluster_config.get("ssh_private_key_path")
+        namespace = cluster_config.get("namespace", "default")
+        secret_names = cluster_config.get("secret_names", [])
+
+        if not all([master_ip, ssh_user, ssh_key_path]):
+            raise ValueError("Cluster config missing required keys")
+
+        # Validate secret_names length if provided
+        if secret_names and len(secret_names) != len(registries):
+            raise RuntimeError("Length of secret_names must match number of registries")
+
+        # Create temp dir for TF
+        temp_dir = Path(self.output_dir) / "registry-secret"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+
+        try:
+            # Copy template tf file into temp dir
+            tf_source_file = Path(self.template_manager.templates_dir) / "registry_secret.tf"
+            if not tf_source_file.exists():
+                logger.debug(f"registry_secret.tf not found at: {tf_source_file}")
+                raise RuntimeError(f"registry_secret.tf not found at: {tf_source_file}")
+
+            tf_target = temp_dir / "registry_secret.tf"
+            shutil.copy(tf_source_file, tf_target)
+            logger.debug(f"Copied registry_secret.tf to {temp_dir}")
+
+            # Setup env for tofu
+            env_vars = os.environ.copy()
+            env_vars["TF_LOG"] = os.getenv("TF_LOG", "INFO")
+
+            # tofu init
+            CommandExecutor.run_command(
+                ["tofu", "init"],
+                cwd=str(temp_dir),
+                description="Init OpenTofu",
+                env=env_vars,
+            )
+
+            # Apply registry secrets
+            apply_vars = [
+                f"-var=registries={json.dumps(registries)}",
+                f"-var=usernames={json.dumps(usernames)}",
+                f"-var=passwords={json.dumps(passwords)}",
+                f"-var=master_ip={master_ip}",
+                f"-var=ssh_user={ssh_user}",
+                f"-var=ssh_private_key_path={ssh_key_path}",
+                f"-var=namespace={namespace}"
+            ]
+            if secret_names:
+                apply_vars.append(f"-var=secret_names={json.dumps(secret_names)}")
+
+            CommandExecutor.run_command(
+                ["tofu", "apply", "-auto-approve"] + apply_vars,
+                cwd=str(temp_dir),
+                description="Apply registry secrets",
+                env=env_vars,
+            )
+
+            # Fetch Terraform/OpenTofu output
+            output_result = CommandExecutor.run_command(
+                ["tofu", "output", "-json", "docker_registry_secret_names"],
+                cwd=str(temp_dir),
+                description="Fetch registry secret names",
+                env=env_vars,
+            )
+
+            lines = [line for line in output_result.splitlines() if line.strip()]
+            if not lines:
+                raise RuntimeError("No output received from OpenTofu for secret names")
+            secret_names_list = json.loads(lines[-1])
+            logger.info(f"Created registry secrets: {secret_names_list}")
+
+            return secret_names_list
+
+        finally:
+            logger.debug(f"Cleaning up temp dir: {temp_dir}")
+            shutil.rmtree(temp_dir)
