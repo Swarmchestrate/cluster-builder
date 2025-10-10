@@ -13,25 +13,11 @@ resource "null_resource" "copy_manifests" {
     host        = var.master_ip
   }
 
-  # Copy the manifest folder into /tmp
-  provisioner "file" {
-    source      = var.manifest_folder
-    destination = "/tmp/"
-  }
-
-  # Apply namespace.yaml first if exists
   provisioner "remote-exec" {
     inline = [
-      "folder_name=$(basename ${var.manifest_folder})",
-      "if [ -f /tmp/$folder_name/namespace.yaml ]; then sudo -E KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl apply -f /tmp/$folder_name/namespace.yaml; fi"
-    ]
-  }
-
-  # Apply the rest of the manifests
-  provisioner "remote-exec" {
-    inline = [
-      "folder_name=$(basename ${var.manifest_folder})",
-      "sudo -E KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl apply -R -f /tmp/$folder_name"
+      "sudo rm -rf /var/lib/rancher/k3s/server/manifests/*",
+      "sudo cp -r ${var.manifest_folder}/* /var/lib/rancher/k3s/server/manifests/",
+      "sudo chown -R root:root /var/lib/rancher/k3s/server/manifests/"
     ]
   }
 }
