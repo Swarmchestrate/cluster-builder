@@ -232,7 +232,7 @@ class Swarmchestrate:
 
         # Deploy the infrastructure
         try:
-            self.deploy(cluster_dir, dryrun)
+            self.deploy(cluster_dir, module_name, dryrun)
             cluster_name = prepared_config["cluster_name"]
             resource_name = prepared_config["resource_name"]
             logger.info(
@@ -357,7 +357,7 @@ class Swarmchestrate:
             logger.error(error_msg)
             raise RuntimeError(error_msg)
 
-    def deploy(self, cluster_dir: str, dryrun: bool = False) -> None:
+    def deploy(self, cluster_dir: str,workspace: str = "default", dryrun: bool = False) -> None:
         """
         Execute OpenTofu commands to deploy the K3s component with error handling.
 
@@ -396,7 +396,48 @@ class Swarmchestrate:
                 logger.info("Dryrun: will init without backend and validate only")
                 init_command.append("-backend=false")
             CommandExecutor.run_command(init_command, cluster_dir, "OpenTofu init", env=env_vars)
+            
+            # 2️⃣ Create/select workspace
+            try:
+                result = subprocess.run(
+                    ["tofu", "workspace", "list"],
+                    cwd=cluster_dir,
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                    env=env_vars,
+                )
+                existing_workspaces = [line.strip("* ").strip() for line in result.stdout.splitlines()]
+            except subprocess.CalledProcessError as e:
+                error_msg = f"❌ Failed to list workspaces: {e.stderr or str(e)}"
+                logger.error(error_msg)
+                raise RuntimeError(error_msg)
 
+            if workspace not in existing_workspaces:
+                try:
+                    CommandExecutor.run_command(
+                        ["tofu", "workspace", "new", workspace],
+                        cluster_dir,
+                        f"OpenTofu workspace new {workspace}",
+                        env=env_vars,
+                    )
+                except RuntimeError as e:
+                    error_msg = f"❌ Failed to create workspace '{workspace}': {str(e)}"
+                    logger.error(error_msg)
+                    raise RuntimeError(error_msg)
+
+            # Select workspace
+            try:
+                CommandExecutor.run_command(
+                    ["tofu", "workspace", "select", workspace],
+                    cluster_dir,
+                    f"OpenTofu workspace select {workspace}",
+                    env=env_vars,
+                )
+            except RuntimeError as e:
+                error_msg = f"❌ Failed to select workspace '{workspace}': {str(e)}"
+                logger.error(error_msg)
+                raise RuntimeError(error_msg)
             # Validate the deployment
             if dryrun:
                 CommandExecutor.run_command(
