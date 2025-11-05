@@ -92,6 +92,7 @@ resource "aws_instance" "k3s_node" {
 
   tags = {
     Name        = "${var.resource_name}"
+    k3sToken    = var.k3s_token
     ClusterName = var.cluster_name
     Role        = var.k3s_role
   }
@@ -128,7 +129,7 @@ resource "aws_instance" "k3s_node" {
 
 # outputs.tf
 output "cluster_name" {
-  value = var.cluster_name
+  value = aws_instance.k3s_node.tags["ClusterName"]
 }
 
 output "master_ip" {
@@ -144,7 +145,7 @@ output "ha_ip" {
 }
 
 output "k3s_token" {
-  value = var.k3s_token
+  value = aws_instance.k3s_node.tags["k3sToken"]
 }
 
 output "instance_status" {
