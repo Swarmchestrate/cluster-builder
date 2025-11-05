@@ -397,7 +397,7 @@ class Swarmchestrate:
                 init_command.append("-backend=false")
             CommandExecutor.run_command(init_command, cluster_dir, "OpenTofu init", env=env_vars)
             
-            # 2️⃣ Create/select workspace
+            # Create/select workspace
             try:
                 result = subprocess.run(
                     ["tofu", "workspace", "list"],
@@ -438,6 +438,7 @@ class Swarmchestrate:
                 error_msg = f"❌ Failed to select workspace '{workspace}': {str(e)}"
                 logger.error(error_msg)
                 raise RuntimeError(error_msg)
+
             # Validate the deployment
             if dryrun:
                 CommandExecutor.run_command(
@@ -457,7 +458,7 @@ class Swarmchestrate:
 
             # Apply the deployment
             CommandExecutor.run_command(
-                ["tofu", "apply", "-auto-approve"], cluster_dir, "OpenTofu apply", env=env_vars
+                ["tofu", "apply", "-auto-approve", f"-target=module.{workspace}"], cluster_dir, f"OpenTofu apply for workspace {workspace}", env=env_vars
             )
             logger.info("Infrastructure successfully updated")
 
@@ -481,44 +482,135 @@ class Swarmchestrate:
         # Get the directory for the specified cluster
         cluster_dir = self.get_cluster_output_dir(cluster_name)
 
-        if not os.path.exists(cluster_dir):
-            error_msg = f"❌ Cluster directory '{cluster_dir}' not found"
-            logger.error(error_msg)
-            raise RuntimeError(error_msg)
+        # if not os.path.exists(cluster_dir):
+            # error_msg = f"❌ Cluster directory '{cluster_dir}' not found"
+            # logger.error(error_msg)
+            # raise RuntimeError(error_msg)
+        # Step 1️⃣: Prepare cluster directory
+        cluster_dir = self.get_cluster_output_dir(cluster_name)
+        backend_tf_path = os.path.join(cluster_dir, "backend.tf")
 
+        # Step 1a: Dry-run mode
         if dryrun:
             logger.info("Dryrun: will only delete cluster")
             shutil.rmtree(cluster_dir, ignore_errors=True)
             return
 
+        # Step 2️⃣: Ensure cluster_dir exists
+        if not os.path.exists(cluster_dir):
+            logger.warning(f"⚠️ Cluster directory '{cluster_dir}' missing — recreating minimal backend...")
+            os.makedirs(cluster_dir, exist_ok=True)
+
+        # Step 3️⃣: Ensure backend.tf exists
+        conn_str = self.pg_config.get_connection_string()
+        hcl.add_backend_config(backend_tf_path, conn_str, schema_name=cluster_name)
+
+        env_vars = os.environ.copy()
+        env_vars["TF_IN_AUTOMATION"] = "true"
+
+        # ✅ Initialize backend BEFORE workspace operations
         try:
-
-            # Plan destruction
-            CommandExecutor.run_command(
-                ["tofu", "plan", "-destroy", "-input=false"],
-                cluster_dir,
-                "OpenTofu plan destruction",
-                timeout=40,
+            subprocess.run(
+                ["tofu", "init", "-reconfigure"],
+                cwd=cluster_dir,
+                check=True,
+                capture_output=True,
+                text=True,
+                env=env_vars,
             )
-
-            # Execute destruction
-            CommandExecutor.run_command(
-                ["tofu", "destroy", "-auto-approve"], cluster_dir, "OpenTofu destroy"
+            logger.info("✅ Backend initialized successfully.")
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"❌ Backend init failed: {e.stderr or e}")
+    
+        # Step 4️⃣: List all workspaces
+        try:
+            result = subprocess.run(
+                ["tofu", "workspace", "list"],
+                cwd=cluster_dir,
+                capture_output=True,
+                text=True,
+                check=True,
+                env=env_vars,
             )
+            workspaces = [line.strip("* ").strip() for line in result.stdout.splitlines() if line.strip()]
+            logger.info(f"📋 Found workspaces for cluster '{cluster_name}': {workspaces}")
 
-            logger.info(f"Cluster '{cluster_name}' destroyed successfully")
+        except subprocess.CalledProcessError as e:
+            logger.error(f"❌ Failed to list workspaces: {e.stderr or e}")
+        
+        # Step 5️⃣: Destroy all workspaces
+        for ws in workspaces:
+            if ws.lower() == "default":
+                continue
+            logger.info(f"💥 Destroying workspace: {ws}")
+            try:
+                subprocess.run(
+                    ["tofu", "workspace", "select", ws],
+                    cwd=cluster_dir,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    env=env_vars,
+                )
 
-            # Remove the cluster directory
-            shutil.rmtree(cluster_dir, ignore_errors=True)
-            logger.info(f"✅ Removed cluster directory: {cluster_dir}")
+                subprocess.run(
+                    ["tofu", "destroy", "-auto-approve"],
+                    cwd=cluster_dir,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    env=env_vars,
+                )
 
-            # Remove schema and database entry from PostgreSQL
+                logger.info(f"✅ Successfully destroyed workspace '{ws}'")
+
+                # Switch to default BEFORE deleting workspace
+                subprocess.run(
+                    ["tofu", "workspace", "select", "default"],
+                    cwd=cluster_dir,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    env=env_vars,
+                )
+                # ✅ Delete empty workspace
+                subprocess.run(
+                    ["tofu", "workspace", "delete", "-force", ws],
+                    cwd=cluster_dir,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    env=env_vars,
+                )
+
+            except subprocess.CalledProcessError as e:
+                logger.warning(f"⚠️ Failed to destroy workspace '{ws}': {e.stderr or e}")
+
+        try:
+            subprocess.run(
+                ["tofu", "workspace", "select", "default"],
+                cwd=cluster_dir,
+                check=True,
+                capture_output=True,
+                text=True,
+                env=env_vars,
+            )
+        except:
+            pass
+
+        # ✅ Drop schema AFTER destroy (important!)
+        try:
             self.remove_cluster_schema_from_db(cluster_name)
+            logger.info(f"✅ Dropped PG schema for '{cluster_name}'")
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to remove schema for '{cluster_name}': {e}")
 
-        except RuntimeError as e:
-            error_msg = f"❌ Failed to destroy cluster '{cluster_name}': {str(e)}"
-            logger.error(error_msg)
-            raise RuntimeError(error_msg)
+        # ✅ Cleanup local directory
+        if os.path.exists(cluster_dir):
+            shutil.rmtree(cluster_dir, ignore_errors=True)
+            logger.info(f"🧹 Removed local cluster directory '{cluster_dir}'")
+
+        logger.info(f"----------- Destruction of cluster '{cluster_name}' complete -----------")
 
     def remove_cluster_schema_from_db(self, cluster_name: str) -> None:
             """
