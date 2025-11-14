@@ -13,7 +13,7 @@ variable "ssh_password" {
   sensitive = true
   default = null
 }
-variable "ssh_private_key" {
+variable "ssh_key" {
 }
 variable "master_ip" {
   default = null
@@ -45,7 +45,7 @@ resource "null_resource" "deploy_k3s_edge" {
     user        = var.ssh_user
     host        = var.edge_device_ip
     password    = var.ssh_auth_method == "password" ? var.ssh_password : null
-    private_key = var.ssh_auth_method == "key" ? file(var.ssh_private_key) : null
+    private_key = var.ssh_auth_method == "key" ? file(var.ssh_key) : null
   }
 
    provisioner "file" {
@@ -71,28 +71,36 @@ resource "null_resource" "deploy_k3s_edge" {
   }
   depends_on = [local_file.rendered_user_data]
 }
+locals {
+   cluster_name = var.cluster_name
+   k3s_token    = var.k3s_token
+   master_ip    = var.k3s_role == "master" ? var.edge_device_ip : var.master_ip
+   worker_ip    = var.k3s_role == "worker" ? var.edge_device_ip : null
+   ha_ip        = var.k3s_role == "ha" ? var.edge_device_ip : null
+   resource_name = var.resource_name
+ }
 
 # outputs.tf
 output "cluster_name" {
-  value = var.cluster_name
+  value = local.cluster_name
 }
 
 output "master_ip" {
-  value = var.k3s_role == "master" ? var.edge_device_ip : var.master_ip
+  value = local.master_ip
 }
 
 output "worker_ip" {
-  value = var.k3s_role == "worker" ? var.edge_device_ip : null
+  value = local.worker_ip
 }
 
 output "ha_ip" {
-  value = var.k3s_role == "ha" ? var.edge_device_ip : null
+  value = local.ha_ip
 }
 
 output "k3s_token" {
-  value = var.k3s_token
+  value = local.k3s_token
 }
 
 output "resource_name" {
-  value = "var.resource_name}"
+  value = local.resource_name
 }
