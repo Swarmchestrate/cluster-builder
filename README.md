@@ -238,3 +238,10 @@ Templates should be organised as follows:
 - `templates/{cloud}_provider.tf` - Provider configuration templates
 
 ---
+## Contact
+For any questions or feedback, feel free to reach out:
+
+Email: G.Kotak@westminster.ac.uk
+Email: J.Deslauriers@westminster.ac.uk
+
+---
