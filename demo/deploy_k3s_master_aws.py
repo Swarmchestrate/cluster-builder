@@ -3,9 +3,9 @@ from cluster_builder import Swarmchestrate
 from demo.utils import write_outputs
 import logging
 
-logger = logging.getLogger("demo_RA")
+logger = logging.getLogger("k3s_master")
 # Load cluster configuration
-with open("demo/lead_RA.json") as f:
+with open("demo/k3s_server_aws.json") as f:
     master_node = json.load(f)
 
 # Initialize Swarmchestrate
