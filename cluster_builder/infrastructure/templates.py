@@ -37,7 +37,7 @@ class TemplateManager:
 
     def create_provider_config(self, cluster_dir: str, cloud: str) -> None:
         """
-        Create provider configuration file for a specific cloud provider.
+        Create provider configuration file for all the supported cloud.
 
         Args:
             cluster_dir: Directory for the cluster
@@ -46,30 +46,36 @@ class TemplateManager:
         Raises:
             ValueError: If provider template is not found
         """
-        # Define the path for provider config in templates directory
-        provider_template_path = os.path.join(
-            self.templates_dir, f"{cloud.lower()}_provider.tf"
-        )
 
-        # Check if template exists
-        if not os.path.exists(provider_template_path):
-            error_msg = f"Provider template not found: {provider_template_path}"
+        # List all expected provider templates in the templates directory
+        provider_templates = [
+            f for f in os.listdir(self.templates_dir) if f.endswith("_provider.tf")
+        ]
+
+        if not provider_templates:
+            error_msg = f"No provider templates found in {self.templates_dir}"
             logger.error(error_msg)
-            raise ValueError(
-                f"Provider template for cloud '{cloud}' not found. Expected at: {provider_template_path}"
-            )
+            raise ValueError(error_msg)
 
-        # Target file in cluster directory
-        provider_file = os.path.join(cluster_dir, f"{cloud.lower()}_provider.tf")
+        # Copy each provider template to the cluster directory
+        for template_file in provider_templates:
+            src_path = os.path.join(self.templates_dir, template_file)
+            dst_path = os.path.join(cluster_dir, template_file)
 
-        try:
-            # Simply copy the provider config file to the cluster directory
-            shutil.copy2(provider_template_path, provider_file)
-            logger.debug(f"Created {cloud} provider configuration at {provider_file}")
-        except Exception as e:
-            error_msg = f"Failed to create provider configuration: {e}"
-            logger.error(error_msg)
-            raise RuntimeError(error_msg)
+            if not os.path.exists(src_path):
+                error_msg = f"Provider template missing: {src_path}"
+                logger.error(error_msg)
+                raise ValueError(error_msg)
+
+            try:
+                shutil.copy2(src_path, dst_path)
+                logger.debug(f"Copied provider template {template_file} to {dst_path}")
+            except Exception as e:
+                error_msg = f"Failed to copy provider template {template_file}: {e}"
+                logger.error(error_msg)
+                raise RuntimeError(error_msg)
+
+        logger.info(f"✅ All provider templates copied to cluster directory {cluster_dir}")
 
     def copy_user_data_template(self, role: str, cloud: str) -> None:
         """
