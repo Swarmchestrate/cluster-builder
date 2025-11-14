@@ -9,8 +9,7 @@ variable "volume_size" {}
 variable "openstack_image_id" {}
 variable "openstack_flavor_id" {}
 variable "ssh_user" {}
-variable "ssh_private_key_path" {}
-variable "ssh_key_name" {}
+variable "ssh_key" {}
 variable "k3s_token" {}
 variable "cloud" {}
 variable "ha" {
@@ -25,10 +24,22 @@ variable "use_block_device" {
 variable "security_group_id" {
   default = ""
 }
-variable "tcp_ports" {
+variable "custom_ingress_ports" {
+  type = list(object({
+    from   = number
+    to     = number
+    protocol  = string
+    source = string
+  }))
   default = []
 }
-variable "udp_ports" {
+variable "custom_egress_ports" {
+  type = list(object({
+    from     = number
+    to       = number
+    protocol = string
+    destination = string
+  }))
   default = []
 }
 
@@ -50,30 +61,44 @@ resource "openstack_networking_port_v2" "port_1" {
 locals {
   ingress_rules = var.security_group_id == "" ? concat(
     [
-    { from = 2379, to = 2380, proto = "tcp", desc = "etcd communication", roles = ["master", "ha"] },
-    { from = 6443, to = 6443, proto = "tcp", desc = "K3s API server", roles = ["master", "ha", "worker"] },
-    { from = 8472, to = 8472, proto = "udp", desc = "VXLAN for Flannel", roles = ["master", "ha", "worker"] },
-    { from = 10250, to = 10250, proto = "tcp", desc = "Kubelet metrics", roles = ["master", "ha", "worker"] },
-    { from = 51820, to = 51820, proto = "udp", desc = "Wireguard IPv4", roles = ["master", "ha", "worker"] },
-    { from = 51821, to = 51821, proto = "udp", desc = "Wireguard IPv6", roles = ["master", "ha", "worker"] },
-    { from = 5001, to = 5001, proto = "tcp", desc = "Embedded registry", roles = ["master", "ha"] },
-    { from = 22, to = 22, proto = "tcp", desc = "SSH access", roles = ["master", "ha", "worker"] },
-    { from = 80, to = 80, proto = "tcp", desc = "HTTP access", roles = ["master", "ha", "worker"] },
-    { from = 443, to = 443, proto = "tcp", desc = "HTTPS access", roles = ["master", "ha", "worker"] },
-    { from = 53, to = 53, proto = "udp", desc = "DNS for CoreDNS", roles = ["master", "ha", "worker"] },
-    { from = 5432, to = 5432, proto = "tcp", desc = "PostgreSQL access", roles = ["master"] }
-  ],
-    [
-      for port in var.tcp_ports : {
-        from = port, to = port, proto = "tcp", desc = "Custom TCP rule for port ${port}", roles = ["master", "ha", "worker"]
-      }
+      { from = 2379, to = 2380, proto = "tcp", desc = "etcd communication", roles = ["master", "ha"], source = "0.0.0.0/0", ethertype = "IPv4" },
+      { from = 6443, to = 6443, proto = "tcp", desc = "K3s API server", roles = ["master", "ha", "worker"], source = "0.0.0.0/0", ethertype = "IPv4" },
+      { from = 8472, to = 8472, proto = "udp", desc = "VXLAN for Flannel", roles = ["master", "ha", "worker"], source = "0.0.0.0/0", ethertype = "IPv4" },
+      { from = 10250, to = 10250, proto = "tcp", desc = "Kubelet metrics", roles = ["master", "ha", "worker"], source = "0.0.0.0/0", ethertype = "IPv4" },
+      { from = 51820, to = 51820, proto = "udp", desc = "Wireguard IPv4", roles = ["master", "ha", "worker"], source = "0.0.0.0/0", ethertype = "IPv4" },
+      { from = 51821, to = 51821, proto = "udp", desc = "Wireguard IPv6", roles = ["master", "ha", "worker"], source = "::/0", ethertype = "IPv6" },
+      { from = 5001, to = 5001, proto = "tcp", desc = "Embedded registry", roles = ["master", "ha"], source = "0.0.0.0/0", ethertype = "IPv4" },
+      { from = 22, to = 22, proto = "tcp", desc = "SSH access", roles = ["master", "ha", "worker"], source = "0.0.0.0/0", ethertype = "IPv4" },
+      { from = 80, to = 80, proto = "tcp", desc = "HTTP access", roles = ["master", "ha", "worker"], source = "0.0.0.0/0", ethertype = "IPv4" },
+      { from = 443, to = 443, proto = "tcp", desc = "HTTPS access", roles = ["master", "ha", "worker"], source = "0.0.0.0/0", ethertype = "IPv4" },
+      { from = 53, to = 53, proto = "udp", desc = "DNS for CoreDNS", roles = ["master", "ha", "worker"], source = "0.0.0.0/0", ethertype = "IPv4" },
+      { from = 5432, to = 5432, proto = "tcp", desc = "PostgreSQL access", roles = ["master"], source = "0.0.0.0/0", ethertype = "IPv4" }
     ],
-    [
-      for port in var.udp_ports : {
-        from = port, to = port, proto = "udp", desc = "Custom UDP rule for port ${port}", roles = ["master", "ha", "worker"]
+   [
+      for rule in var.custom_ingress_ports : {
+        from   = rule.from
+        to     = rule.to
+        proto  = rule.protocol
+        source = coalesce(rule.source, "0.0.0.0/0")
+        ethertype = can(regex(":", coalesce(rule.source, ""))) ? "IPv6" : "IPv4"
+        desc   = "Custom for ${rule.protocol}"
+        roles  = ["master", "ha", "worker"]
       }
     ]
   ) : []
+
+  egress_rules = var.security_group_id == "" ? [
+    for rule in var.custom_egress_ports : {
+      from        = rule.from
+      to          = rule.to
+      protocol    = rule.protocol
+      destination = coalesce(rule.destination, "0.0.0.0/0")
+      ethertype   = can(regex(":", coalesce(rule.destination, ""))) ? "IPv6" : "IPv4"
+      desc        = "Custom egress for ${rule.protocol}"
+      roles       = ["master", "ha", "worker"]
+    }
+  ] : []
+
 }
 
 # Security Group Resource
@@ -93,14 +118,30 @@ resource "openstack_networking_secgroup_rule_v2" "k3s_sg_rules" {
 
   security_group_id = openstack_networking_secgroup_v2.k3s_sg[0].id  # Use index 0 since only 1 security group is created when count > 0
   direction         = "ingress"
-  ethertype         = "IPv4"
+  ethertype         = each.value.ethertype
   port_range_min    = each.value.from
   port_range_max    = each.value.to
   protocol          = each.value.proto
-  remote_ip_prefix  = "0.0.0.0/0"
+  remote_ip_prefix  = each.value.source
   description       = each.value.desc
 }
 
+# Egress Security Group Rules
+resource "openstack_networking_secgroup_rule_v2" "k3s_sg_egress" {
+  for_each = var.security_group_id == "" ? {
+    for idx, rule in local.egress_rules :
+    "${rule.from}-${rule.to}-${rule.protocol}-${rule.desc}" => rule
+  } : {}
+
+  security_group_id = openstack_networking_secgroup_v2.k3s_sg[0].id
+  direction         = "egress"
+  ethertype         = each.value.ethertype
+  port_range_min    = each.value.from
+  port_range_max    = each.value.to
+  protocol          = each.value.protocol
+  remote_ip_prefix  = each.value.destination
+  description       = each.value.desc
+}
 
 resource "openstack_networking_port_secgroup_associate_v2" "port_2" {
   port_id = openstack_networking_port_v2.port_1.id
@@ -115,7 +156,7 @@ resource "openstack_compute_instance_v2" "k3s_node" {
 
   name             = "${var.resource_name}"
   flavor_name      = var.openstack_flavor_id
-  key_pair         = var.ssh_key_name
+  key_pair         = replace(basename(var.ssh_key), ".pem", "")
  # Only add the image_id if block device is NOT used
   image_id = var.use_block_device ? null : var.openstack_image_id
 
@@ -136,7 +177,8 @@ resource "openstack_compute_instance_v2" "k3s_node" {
   }
 
   tags = [
-    "${var.resource_name}",
+    "Name=${var.resource_name}",
+    "k3sToken=${var.k3s_token}",
     "ClusterName=${var.cluster_name}",
     "Role=${var.k3s_role}"
   ]
@@ -183,14 +225,14 @@ resource "null_resource" "k3s_provision" {
   connection {
     type        = "ssh"
     user        = var.ssh_user
-    private_key = file(var.ssh_private_key_path)
+    private_key = file(var.ssh_key)
     host        = openstack_networking_floatingip_v2.floatip_1.address
   }
 }
 
 # outputs.tf
 output "cluster_name" {
-  value = var.cluster_name
+  value = [for t in openstack_compute_instance_v2.k3s_node.tags : split("=", t)[1] if startswith(t, "ClusterName=")][0]
 }
 
 output "master_ip" {
@@ -206,7 +248,7 @@ output "ha_ip" {
 }
 
 output "k3s_token" {
-  value = var.k3s_token
+  value = [for t in openstack_compute_instance_v2.k3s_node.tags : split("=", t)[1] if startswith(t, "k3sToken=")][0]
 }
 
 output "instance_power_state" {
