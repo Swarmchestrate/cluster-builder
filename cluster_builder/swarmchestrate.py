@@ -573,14 +573,14 @@ class Swarmchestrate:
                 CommandExecutor.run_command(
                     ["tofu", "workspace", "select", ws],
                     cluster_dir,
-                    f"select workspace {ws}",
+                    f"select workspace for node {ws}",
                     env=env_vars,
                 )
 
                 CommandExecutor.run_command(
                     ["tofu", "destroy", "-auto-approve"],
                     cluster_dir,
-                    f"destroy WS {ws}",
+                    f"OpenTofu destroy for {ws}",
                     env=env_vars,
                 )
 
