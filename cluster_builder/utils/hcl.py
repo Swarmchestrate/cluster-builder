@@ -83,8 +83,8 @@ def is_target_module_block(tree: Tree, module_name: str) -> bool:
     """
     Check if the tree is a module block with the specified name.
     """
-    logger.info(f"Checking tree with data: {tree.data}, children count: {len(tree.children)}")
-    logger.info(f"Children types and values: {[ (type(c), getattr(c, 'value', None)) for c in tree.children ]}")
+    logger.debug(f"Checking tree with data: {tree.data}, children count: {len(tree.children)}")
+    logger.debug(f"Children types and values: {[ (type(c), getattr(c, 'value', None)) for c in tree.children ]}")
 
     if tree.data != "block":
         logger.debug(f"Rejected: tree.data is '{tree.data}', expected 'block'")
@@ -118,7 +118,7 @@ def is_target_module_block(tree: Tree, module_name: str) -> bool:
         logger.debug(f"Second child check failed: type={type(second_child)}, value={getattr(second_child, 'value', None)} expected=\"{module_name}\"")
         return False
 
-    logger.info(f"Module block matched for module name '{module_name}'")
+    logger.debug(f"Module block matched for module name '{module_name}'")
     return True
 
 def simple_remove_module(tree, module_name, removed=False):
@@ -209,7 +209,7 @@ def remove_module_block(main_tf_path, module_name: str):
         with open(main_tf_path, "w") as f:
             f.write(new_source)
 
-        logger.info("🗑️ Removed module '%s' from %s", module_name, main_tf_path)
+        logger.debug("🗑️ Removed module '%s' from %s", module_name, main_tf_path)
     except Exception as e:
         logger.error("❌ Failed to reconstruct HCL in %s: %s", main_tf_path, e, exc_info=True)
         # Print more detailed error information

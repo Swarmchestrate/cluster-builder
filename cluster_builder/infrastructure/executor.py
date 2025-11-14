@@ -38,9 +38,9 @@ class CommandExecutor:
             RuntimeError: If the command execution fails or times out
         """
         cmd_str = " ".join(command)
-        logger.info(f"Running {description}: {cmd_str}")
+        logger.debug(f"Running {description}: {cmd_str}")
 
-        show_spinner = timeout is None or timeout > 15
+        show_spinner = timeout is None or timeout > 5
 
         process = subprocess.Popen(
             command,
@@ -53,13 +53,13 @@ class CommandExecutor:
 
         if show_spinner:
             try:
-                process.wait(timeout=15)
+                process.wait(timeout=5)
                 stdout, stderr = process.communicate()
                 return CommandExecutor._check_result(stdout, stderr, process.returncode, description)
             except subprocess.TimeoutExpired:
                 pass  # Still running → spinner starts
 
-        # Either timeout <= 15s, or process still running after 15s
+        # Either timeout <= 5s, or process still running after 5s
         spinner = yaspin(Spinners.point, text=f"Running {description}...", color="cyan") if show_spinner else None
         if spinner:
             spinner.start()

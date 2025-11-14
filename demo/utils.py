@@ -1,6 +1,6 @@
 import json
 
-OUTPUT_FILE = "demo/lead_RA_outputs.json"
+OUTPUT_FILE = "demo/k3s_master_outputs.json"
 
 def write_outputs(cluster_name, master_ip, k3s_token):
     data = {
