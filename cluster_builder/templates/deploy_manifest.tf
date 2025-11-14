@@ -13,11 +13,16 @@ resource "null_resource" "copy_manifests" {
     host        = var.master_ip
   }
 
+  # Copy manifest folder to a temporary location first
+  provisioner "file" {
+    source      = var.manifest_folder
+    destination = "/tmp/manifests_temp/"
+  }
+
+  # Move manifests into K3s manifests folder atomically
   provisioner "remote-exec" {
     inline = [
-      "sudo rm -rf /var/lib/rancher/k3s/server/manifests/*",
-      "sudo cp -r ${var.manifest_folder}/* /var/lib/rancher/k3s/server/manifests/",
-      "sudo chown -R root:root /var/lib/rancher/k3s/server/manifests/"
+      "sudo mv /tmp/manifests_temp/* /var/lib/rancher/k3s/server/manifests/"
     ]
   }
 }
