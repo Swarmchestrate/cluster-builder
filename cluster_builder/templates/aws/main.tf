@@ -8,8 +8,7 @@ variable "master_ip" {
 variable "ami" {}
 variable "instance_type" {}
 variable "ssh_user" {}
-variable "ssh_private_key_path" {}
-variable "ssh_key_name" {}
+variable "ssh_key" {}
 variable "k3s_token" {}
 variable "cloud" {}
 variable "ha" {
@@ -18,12 +17,21 @@ variable "ha" {
 variable "security_group_id" {
   default = ""
 }
-variable "custom_ports" {
+variable "custom_ingress_ports" {
   type = list(object({
     from   = number
     to     = number
     protocol  = string
     source = string
+  }))
+  default = []
+}
+variable "custom_egress_ports" {
+  type = list(object({
+    from     = number
+    to       = number
+    protocol = string
+    destination = string
   }))
   default = []
 }
@@ -57,13 +65,13 @@ resource "aws_security_group" "k3s_sg" {
       for idx, rule in concat(
         local.default_rules,
         [
-          for i in range(length(var.custom_ports)) : {
-            from  = var.custom_ports[i].from
-            to    = var.custom_ports[i].to
-            protocol = var.custom_ports[i].protocol
-            desc  = "Custom rule for ${var.custom_ports[i].protocol}"
+          for i in range(length(var.custom_ingress_ports)) : {
+            from  = var.custom_ingress_ports[i].from
+            to    = var.custom_ingress_ports[i].to
+            protocol = var.custom_ingress_ports[i].protocol
+            desc  = "Custom rule for ${var.custom_ingress_ports[i].protocol}"
             roles = ["master", "ha", "worker"]
-            source = var.custom_ports[i].source
+            source = var.custom_ingress_ports[i].source
           }
         ]
       ) : idx => rule if contains(rule.roles, var.k3s_role)
@@ -77,11 +85,29 @@ resource "aws_security_group" "k3s_sg" {
     }
   }
 
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+  dynamic "egress" {
+    for_each = {
+      for idx, rule in concat(
+        [
+          {
+            from        = 0
+            to          = 0
+            protocol    = "-1"
+            destination = "0.0.0.0/0"
+            desc        = "Default allow all egress"
+          }
+        ],
+        var.custom_egress_ports
+      ) : idx => rule
+    }
+
+    content {
+      from_port   = egress.value.from
+      to_port     = egress.value.to
+      protocol    = egress.value.protocol
+      cidr_blocks = [lookup(egress.value, "destination", "0.0.0.0/0")]
+      description = lookup(egress.value, "desc", "Custom egress rule")
+    }
   }
 
   tags = {
@@ -92,7 +118,7 @@ resource "aws_security_group" "k3s_sg" {
 resource "aws_instance" "k3s_node" {
   ami                    = var.ami
   instance_type          = var.instance_type
-  key_name               = var.ssh_key_name
+  key_name = replace(basename(var.ssh_key), ".pem", "")
 
   # Use the provided security group ID if available or the one created by the security group resource.
   vpc_security_group_ids = var.security_group_id != "" ? [var.security_group_id] : [aws_security_group.k3s_sg[0].id]
@@ -129,7 +155,7 @@ resource "aws_instance" "k3s_node" {
   connection {
     type        = "ssh"
     user        = var.ssh_user
-    private_key = file(var.ssh_private_key_path)
+    private_key = file(var.ssh_key)
     host        = self.public_ip
   }
 }
