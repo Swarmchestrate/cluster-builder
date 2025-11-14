@@ -241,7 +241,7 @@ Templates should be organised as follows:
 ## Contact
 For any questions or feedback, feel free to reach out:
 
-Email: G.Kotak@westminster.ac.uk
-Email: J.Deslauriers@westminster.ac.uk
+- Email: G.Kotak@westminster.ac.uk
+- Email: J.Deslauriers@westminster.ac.uk
 
 ---
