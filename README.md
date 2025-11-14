@@ -99,12 +99,15 @@ orchestrator = Swarmchestrate(
 
 The same add_node method is used both for creating a new cluster (with the master node) and for adding worker or high-availability nodes.
 
-#### 1. Create a configuration file for your node (AWS, OpenStack, or edge). See [config](docs/config-example.md) for details.
+#### 1. 1. Prepare the configuration for your node (AWS, OpenStack, or edge):
+You may define it directly as a Python dictionary or load it from a separate file. Refer [config](docs/config-example.md) for details.
 
 #### 2. Load the configuration in Python:
 
 ```python
-config ={ }
+config ={ 
+    # your config fields here
+}
 
 # Add the node to the cluster (master for new cluster, worker/HA for existing)
 cluster_name = orchestrator.add_node(config)
