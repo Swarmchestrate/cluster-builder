@@ -587,7 +587,7 @@ class Swarmchestrate:
                 logger.info(f"✅ Successfully destroyed node '{ws}'")
 
                 CommandExecutor.run_command(["tofu", "workspace", "select", "default"],
-                            cluster_dir, f"switching back to default", env=env_vars)
+                            cluster_dir, "switching back to default", env=env_vars)
                 CommandExecutor.run_command(["tofu", "workspace", "delete", "-force", ws],
                             cluster_dir, f"deleting workspace {ws}", env=env_vars)
             except RuntimeError as e:
