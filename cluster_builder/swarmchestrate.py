@@ -281,10 +281,10 @@ class Swarmchestrate:
 
 
     def remove_node(
-        self, cluster_name: str, resource_name: str, is_edge: bool = False, dryrun: bool = False
+        self, cluster_name: str, resource_name: str, dryrun: bool = False
     ) -> None:
         """
-        Remove a specific node from a cluster.
+        Remove a specific node except edge from a cluster.
 
         This method removes a node's infrastructure component from a cluster by
         removing its module block from the Terraform configuration and then
@@ -299,6 +299,7 @@ class Swarmchestrate:
         Raises:
             RuntimeError: If node removal fails
         """
+    
         logger.info(f"------------ Removing node '{resource_name}' from cluster '{cluster_name}' ------------")
 
         # Get the directory for the specified cluster
@@ -308,6 +309,8 @@ class Swarmchestrate:
             error_msg = f"Cluster directory '{cluster_dir}' not found"
             logger.error(error_msg)
             raise RuntimeError(error_msg)
+        
+        env_vars = os.environ.copy()
 
         # Path to main.tf
         main_tf_path = os.path.join(cluster_dir, "main.tf")
@@ -318,41 +321,73 @@ class Swarmchestrate:
             raise RuntimeError(error_msg)
 
         try:
-            # Destroy VM only if cloud node (optional)
-            if not is_edge:
-                tofu_resource = f"opentofu_aws_instance.{resource_name}"
-                if not dryrun:
-                    CommandExecutor.run_command(
-                        ["tofu", "destroy", "-target", tofu_resource, "-auto-approve"],
-                        cwd=cluster_dir,
-                        description=f"Destroying VM for node {resource_name}",
-                    )
-                else:
-                    logger.info(f"Dryrun: would destroy VM for node '{resource_name}' (cloud node)")
+            # Select the workspace
+            if not dryrun:
+                CommandExecutor.run_command(
+                    ["tofu", "workspace", "select", resource_name],
+                    cwd=cluster_dir,
+                    description=f"Selecting workspace '{resource_name}'",
+                    env=env_vars,
+                )
+            else:
+                logger.info(f"Dryrun: select workspace '{resource_name}'")
+            
+            # Destroy the infrastructure
+            if not dryrun:
+                CommandExecutor.run_command(
+                    ["tofu", "destroy", "-auto-approve"],
+                    cwd=cluster_dir,
+                    description=f"Destroying infrastructure for '{resource_name}'",
+                    env=env_vars,
+                )
+            else:
+                logger.info(f"Dryrun: would destroy infrastructure for '{resource_name}'")
+
+            # Switch back to default workspace
+            if not dryrun:
+                CommandExecutor.run_command(
+                    ["tofu", "workspace", "select", "default"],
+                    cwd=cluster_dir,
+                    description="Switching back to default workspace",
+                    env=env_vars,
+                )
+            else:
+                logger.info("Dryrun: would switch back to default workspace")
 
             # Remove module block from main.tf
             hcl.remove_module_block(main_tf_path, resource_name)
-            logger.info(f"Removed module block for '{resource_name}' from {main_tf_path}")
+            logger.info(f"Removed module block for '{resource_name}'")
 
             # Delete outputs.tf entirely (optional, safer for decentralized setup)
             outputs_tf_path = os.path.join(cluster_dir, "outputs.tf")
             if os.path.exists(outputs_tf_path):
                 os.remove(outputs_tf_path)
-                logger.info(f"Deleted outputs.tf before applying changes to remove '{resource_name}'")
+                logger.debug(f"Deleted outputs.tf to ensure stale outputs do not affect 'tofu apply' for '{resource_name}'")
 
             # Apply OpenTofu configuration to update state
             if not dryrun:
                 CommandExecutor.run_command(
                     ["tofu", "apply", "-auto-approve"],
                     cwd=cluster_dir,
-                    description=f"Applying OpenTofu configuration after removing node {resource_name}",
+                    description=f"Applying OpenTofu configuration after removing node {resource_name}", env=env_vars
                 )
             else:
                 logger.info(f"Dryrun: would apply OpenTofu configuration after removing node '{resource_name}'")
 
-            logger.info(f"✅ Node '{resource_name}' removed successfully from cluster '{cluster_name}'")
+            # Delete the workspace
+            if not dryrun:
+                CommandExecutor.run_command(
+                    ["tofu", "workspace", "delete", "-force", resource_name],
+                    cwd=cluster_dir,
+                    description=f"Deleting workspace '{resource_name}'",
+                    env=env_vars,
+                )
+            else:
+                logger.info(f"Dryrun: would delete workspace '{resource_name}'")
 
-        except Exception as e:
+            logger.info(f"----------- Removal of node '{resource_name}' from cluster '{cluster_name}' complete -----------")
+
+        except RuntimeError  as e:
             error_msg = f"❌ Failed to remove node '{resource_name}' from cluster '{cluster_name}': {str(e)}"
             logger.error(error_msg)
             raise RuntimeError(error_msg)
