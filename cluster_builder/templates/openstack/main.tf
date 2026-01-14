@@ -16,7 +16,8 @@ variable "ha" {
   default = false
 }
 
-variable "floating_ip_pool" {}
+variable "floating_ip" {}
+variable "floating_ip_id" {}
 variable "network_id" {}
 variable "use_block_device" {
   default = false
@@ -184,12 +185,8 @@ resource "openstack_compute_instance_v2" "k3s_node" {
   ]
 }
 
-resource "openstack_networking_floatingip_v2" "floatip_1" {
-  pool = var.floating_ip_pool
-}
-
 resource "openstack_networking_floatingip_associate_v2" "fip_association" {
-  floating_ip = openstack_networking_floatingip_v2.floatip_1.address
+  floating_ip = var.floating_ip 
   port_id     = openstack_networking_port_v2.port_1.id
 
   depends_on = [
@@ -199,7 +196,7 @@ resource "openstack_networking_floatingip_associate_v2" "fip_association" {
 
 # Provisioning via SSH
 resource "null_resource" "k3s_provision" {
-  depends_on = [openstack_networking_floatingip_v2.floatip_1]
+  depends_on = [openstack_networking_floatingip_associate_v2.fip_association]
 
   provisioner "file" {
     content = templatefile("${path.module}/${var.k3s_role}_user_data.sh.tpl", {
@@ -207,7 +204,7 @@ resource "null_resource" "k3s_provision" {
       k3s_token    = var.k3s_token,
       master_ip    = var.master_ip,
       cluster_name = var.cluster_name,
-      public_ip    = openstack_networking_floatingip_v2.floatip_1.address,
+      public_ip    = var.floating_ip
       resource_name    = "${var.resource_name}"
     })
     destination = "/tmp/k3s_user_data.sh"
@@ -226,7 +223,7 @@ resource "null_resource" "k3s_provision" {
     type        = "ssh"
     user        = var.ssh_user
     private_key = file(var.ssh_key)
-    host        = openstack_networking_floatingip_v2.floatip_1.address
+    host        = var.floating_ip
   }
 }
 
@@ -236,15 +233,15 @@ output "cluster_name" {
 }
 
 output "master_ip" {
-  value = var.k3s_role == "master" ? openstack_networking_floatingip_v2.floatip_1.address : var.master_ip
+  value = var.k3s_role == "master" ? var.floating_ip : var.master_ip
 }
 
 output "worker_ip" {
-  value = var.k3s_role == "worker" ? openstack_networking_floatingip_v2.floatip_1.address : null
+  value = var.k3s_role == "worker" ? var.floating_ip : null
 }
 
 output "ha_ip" {
-  value = var.k3s_role == "ha" ? openstack_networking_floatingip_v2.floatip_1.address : null
+  value = var.k3s_role == "ha" ? var.floating_ip : null
 }
 
 output "k3s_token" {
