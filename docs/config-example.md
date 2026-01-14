@@ -50,7 +50,6 @@ config = {
       "ha": false,
       "ssh_user": "ubuntu",
       "ssh_key": "/path/to/key.pem",
-      "floating_ip_pool": "ext-net",
       "network_id": "bbe042e4-91a1-4601-962f-14a31e5e2787",
       "use_block_device": true,
       // If existing SG is specified, it will be used directly with no port changes
