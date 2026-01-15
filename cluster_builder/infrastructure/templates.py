@@ -75,7 +75,7 @@ class TemplateManager:
                 logger.error(error_msg)
                 raise RuntimeError(error_msg)
 
-        logger.info(f"✅ All provider templates copied to cluster directory {cluster_dir}")
+        logger.debug(f"✅ All provider templates copied to cluster directory {cluster_dir}")
 
     def copy_user_data_template(self, role: str, cloud: str) -> None:
         """

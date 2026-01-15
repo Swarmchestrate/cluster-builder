@@ -10,7 +10,7 @@ import shutil
 import subprocess
 from typing import Optional
 import psycopg2
-
+from openstack import connection
 from dotenv import load_dotenv
 
 from cluster_builder.config.postgres import PostgresConfig
@@ -73,6 +73,55 @@ class Swarmchestrate:
         """
         return self.cluster_config.get_cluster_output_dir(cluster_name)
 
+    def get_unused_floating_ip(self, first_only: bool = True) -> str | list[str] | None:
+        """
+        Fetch unused floating IP(s) from OpenStack using application credentials
+        loaded from environment variables.
+
+        Returns:
+            - dict: {"id": <floating_ip_id>, "address": <floating_ip_address>} if first_only=True
+            - list[dict]: list of unused IPs if first_only=False
+            - None: if no unused IPs are available
+        """
+
+        required_env_vars = [
+            "TF_VAR_openstack_auth_url",
+            "TF_VAR_openstack_application_credential_id",
+            "TF_VAR_openstack_application_credential_secret",
+        ]
+
+        missing = [v for v in required_env_vars if not os.environ.get(v)]
+        if missing:
+            raise RuntimeError(
+                f"Missing OpenStack environment variables: {', '.join(missing)}"
+            )
+
+        logger.info("Connecting to OpenStack to fetch unused floating IPs")
+
+        conn = connection.Connection(
+            auth_url=os.environ["TF_VAR_openstack_auth_url"],
+            auth_type="v3applicationcredential",
+            application_credential_id=os.environ["TF_VAR_openstack_application_credential_id"],
+            application_credential_secret=os.environ["TF_VAR_openstack_application_credential_secret"],
+        )
+
+        unused_ips = [
+            {"id": ip.id, "address": ip.floating_ip_address}
+            for ip in conn.network.ips()
+            if not ip.port_id
+        ]
+
+        if not unused_ips:
+            logger.warning("No unused floating IPs found in the project")
+            return None
+
+        if first_only:
+            logger.info(f"Selected floating IP: {unused_ips[0]['address']}")
+            return unused_ips[0]
+
+        logger.info(f"Found {len(unused_ips)} unused floating IPs")
+        return unused_ips
+
     def validate_configuration(self, cloud: str, config: dict) -> list:
         """
         Validate a configuration against the required variables for a cloud provider.
@@ -85,6 +134,20 @@ class Swarmchestrate:
             List of missing required variables (empty if all required variables are present)
         """
         logger.debug(f"Validating configuration for cloud={cloud}, role={config.get('k3s_role')}")
+        if cloud == "openstack" and "floating_ip" not in config:
+            logger.info("OpenStack detected and floating_ip not provided, attempting auto-discovery")
+
+            floating_ip_info = self.get_unused_floating_ip(first_only=True)
+            if not floating_ip_info:
+                raise RuntimeError("No unused floating IPs available in OpenStack for the project")
+
+            # Inject separately
+            config["floating_ip"] = floating_ip_info["address"]      # For SSH, outputs, scripts
+            config["floating_ip_id"] = floating_ip_info["id"]        # For Terraform association
+
+            logger.info(
+                f"Injected floating_ip={config['floating_ip']} and floating_ip_id={config['floating_ip_id']} into configuration"
+            )
         # Master IP validation
         has_master_ip = "master_ip" in config and config["master_ip"]
         role = config["k3s_role"]
@@ -210,6 +273,19 @@ class Swarmchestrate:
         
         cluster_dir, prepared_config = self.prepare_infrastructure(config)
         role = prepared_config["k3s_role"]
+        if prepared_config.get("cloud") == "openstack":
+            logger.info("OpenStack deployment detected, checking for unused floating IP")
+
+            floating_ip = self.get_unused_floating_ip(first_only=True)
+
+            if not floating_ip:
+                raise RuntimeError(
+                    "Deployment aborted: no unused floating IPs available."
+                    "Cloud admin must allocate floating IPs to the project."
+                )
+
+            config["floating_ip"] = floating_ip["address"]
+            config["floating_ip_id"] = floating_ip["id"]         
         
         # Add output blocks for the module you just added
         module_name = prepared_config["resource_name"]
