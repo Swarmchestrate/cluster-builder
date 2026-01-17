@@ -233,15 +233,15 @@ output "cluster_name" {
 }
 
 output "master_ip" {
-  value = var.k3s_role == "master" ? var.floating_ip : var.master_ip
+  value = openstack_networking_floatingip_associate_v2.fip_association.floating_ip
 }
 
 output "worker_ip" {
-  value = var.k3s_role == "worker" ? var.floating_ip : null
+  value = var.k3s_role == "worker" ? openstack_networking_floatingip_associate_v2.fip_association.floating_ip : null
 }
 
 output "ha_ip" {
-  value = var.k3s_role == "ha" ? var.floating_ip : null
+  value = var.k3s_role == "ha" ? openstack_networking_floatingip_associate_v2.fip_association.floating_ip : null
 }
 
 output "k3s_token" {

@@ -71,36 +71,52 @@ resource "null_resource" "deploy_k3s_edge" {
   }
   depends_on = [local_file.rendered_user_data]
 }
+
+# Local variables for outputs
 locals {
-   cluster_name = var.cluster_name
-   k3s_token    = var.k3s_token
-   master_ip    = var.k3s_role == "master" ? var.edge_device_ip : var.master_ip
-   worker_ip    = var.k3s_role == "worker" ? var.edge_device_ip : null
-   ha_ip        = var.k3s_role == "ha" ? var.edge_device_ip : null
-   resource_name = var.resource_name
- }
+   master_ip     = var.k3s_role == "master" ? var.edge_device_ip : var.master_ip
+   worker_ip     = var.k3s_role == "worker" ? var.edge_device_ip : null
+   ha_ip         = var.k3s_role == "ha" ? var.edge_device_ip : null
+}
 
-# outputs.tf
+# Temporary state file in /tmp
+resource "local_file" "edge_state" {
+  content  = jsonencode({
+    cluster_name  = var.cluster_name
+    k3s_token     = var.k3s_token
+    master_ip     = local.master_ip
+    worker_ip     = local.worker_ip
+    ha_ip         = local.ha_ip
+    resource_name = var.resource_name
+  })
+  filename = "/tmp/${var.resource_name}_state.json"
+}
+
+# Delete the temporary state file after Terraform finishes
+resource "null_resource" "cleanup_edge_state" {
+  provisioner "local-exec" {
+    command = "rm -f /tmp/${var.resource_name}_state.json"
+  }
+
+  depends_on = [local_file.edge_state]
+}
+
+# Outputs
 output "cluster_name" {
-  value = local.cluster_name
+  value = jsondecode(local_file.edge_state.content).cluster_name 
 }
-
 output "master_ip" {
-  value = local.master_ip
+  value = jsondecode(local_file.edge_state.content).master_ip 
 }
-
 output "worker_ip" {
-  value = local.worker_ip
+  value = jsondecode(local_file.edge_state.content).worker_ip 
 }
-
 output "ha_ip" {
-  value = local.ha_ip
+  value = jsondecode(local_file.edge_state.content).ha_ip 
 }
-
 output "k3s_token" {
-  value = local.k3s_token
+  value = jsondecode(local_file.edge_state.content).k3s_token 
 }
-
 output "resource_name" {
-  value = local.resource_name
+  value = jsondecode(local_file.edge_state.content).resource_name 
 }
