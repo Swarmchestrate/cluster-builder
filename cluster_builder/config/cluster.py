@@ -121,9 +121,9 @@ class ClusterConfig:
         if "cluster_name" not in prepared_config:
             cluster_name = self.generate_random_name()
             prepared_config["cluster_name"] = cluster_name
-            logger.info(f"Creating new cluster: {cluster_name}")
+            logger.debug(f"Creating new cluster: {cluster_name}")
         else:
-            logger.info(
+            logger.debug(
                 f"Adding node to existing cluster: {prepared_config['cluster_name']}"
             )
 
@@ -136,7 +136,7 @@ class ClusterConfig:
             prepared_config["resource_name"] = f"{cloud}-{random_name}"
             logger.debug(f"Resource name: {prepared_config['resource_name']}")
         else:
-            logger.debug(f" USing provded Resource name: {prepared_config['resource_name']}")
+            logger.debug(f" Using provided Resource name: {prepared_config['resource_name']}")
 
         # Create the cluster directory
         try:
