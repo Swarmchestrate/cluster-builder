@@ -294,9 +294,10 @@ class Swarmchestrate:
         output_names = ["cluster_name", "master_ip", "worker_ip", "ha_ip", "k3s_token", "resource_name"]
         
         # Include additional outputs based on the cloud type
-        if "aws" in cluster_dir:
+        cloud = prepared_config.get("cloud")
+        if cloud == "aws":
             output_names.append("instance_status")
-        elif "openstack" in cluster_dir:
+        elif cloud == "openstack":
             output_names.append("instance_power_state")
 
         # Add output blocks
@@ -333,9 +334,9 @@ class Swarmchestrate:
                 "resource_name": outputs.get("resource_name", {}).get("value")
             }
             # Add cloud-specific output
-            if "aws" in cluster_dir:
+            if cloud == "aws":
                 result_outputs["instance_status"] = outputs.get("instance_status", {}).get("value")
-            elif "openstack" in cluster_dir:
+            elif cloud == "openstack":
                 result_outputs["instance_power_state"] = outputs.get("instance_power_state", {}).get("value")
 
             logger.info(f"----------- Deployment of {role} node successful -----------")
