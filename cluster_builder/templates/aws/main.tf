@@ -1,3 +1,11 @@
+terraform {
+  required_providers {
+    k3s = {
+      source = "striveworks/k3s"
+      version = "0.3.0"
+    }
+  }
+}
 # variables.tf
 variable "cluster_name" {}
 variable "resource_name" {}
@@ -19,39 +27,38 @@ variable "security_group_id" {
 }
 variable "custom_ingress_ports" {
   type = list(object({
-    from   = number
-    to     = number
-    protocol  = string
-    source = string
+    from     = number
+    to       = number
+    protocol = string
+    source   = string
   }))
   default = []
 }
 variable "custom_egress_ports" {
   type = list(object({
-    from     = number
-    to       = number
-    protocol = string
+    from        = number
+    to          = number
+    protocol    = string
     destination = string
   }))
   default = []
 }
 
-#main.tf
+# main.tf
 locals {
-  # Default ingress rules for master/ha/worker nodes
   default_rules = [
-    { from = 2379, to = 2380, protocol = "tcp", desc = "etcd communication", roles = ["master", "ha"] },
-    { from = 6443, to = 6443, protocol = "tcp", desc = "K3s API server", roles = ["master", "ha", "worker"] },
-    { from = 8472, to = 8472, protocol = "udp", desc = "VXLAN for Flannel", roles = ["master", "ha", "worker"] },
-    { from = 10250, to = 10250, protocol = "tcp", desc = "Kubelet metrics", roles = ["master", "ha", "worker"] },
-    { from = 51820, to = 51820, protocol = "udp", desc = "Wireguard IPv4", roles = ["master", "ha", "worker"] },
-    { from = 51821, to = 51821, protocol = "udp", desc = "Wireguard IPv6", roles = ["master", "ha", "worker"] },
-    { from = 5001, to = 5001, protocol = "tcp", desc = "Embedded registry", roles = ["master", "ha"] },
-    { from = 22, to = 22, protocol = "tcp", desc = "SSH access", roles = ["master", "ha", "worker"] },
-    { from = 80, to = 80, protocol = "tcp", desc = "HTTP access", roles = ["master", "ha", "worker"] },
-    { from = 443, to = 443, protocol = "tcp", desc = "HTTPS access", roles = ["master", "ha", "worker"] },
-    { from = 53, to = 53, protocol = "udp", desc = "DNS for CoreDNS", roles = ["master", "ha", "worker"] },
-    { from = 5432, to = 5432, protocol = "tcp", desc = "PostgreSQL access", roles = ["master"] }
+    { from = 2379, to = 2380,  protocol = "tcp", desc = "etcd communication",    roles = ["master", "ha"] },
+    { from = 6443, to = 6443,  protocol = "tcp", desc = "K3s API server",        roles = ["master", "ha", "worker"] },
+    { from = 8472, to = 8472,  protocol = "udp", desc = "VXLAN for Flannel",     roles = ["master", "ha", "worker"] },
+    { from = 10250, to = 10250, protocol = "tcp", desc = "Kubelet metrics",      roles = ["master", "ha", "worker"] },
+    { from = 51820, to = 51820, protocol = "udp", desc = "Wireguard IPv4",       roles = ["master", "ha", "worker"] },
+    { from = 51821, to = 51821, protocol = "udp", desc = "Wireguard IPv6",       roles = ["master", "ha", "worker"] },
+    { from = 5001,  to = 5001,  protocol = "tcp", desc = "Embedded registry",    roles = ["master", "ha"] },
+    { from = 22,    to = 22,    protocol = "tcp", desc = "SSH access",           roles = ["master", "ha", "worker"] },
+    { from = 80,    to = 80,    protocol = "tcp", desc = "HTTP access",          roles = ["master", "ha", "worker"] },
+    { from = 443,   to = 443,   protocol = "tcp", desc = "HTTPS access",         roles = ["master", "ha", "worker"] },
+    { from = 53,    to = 53,    protocol = "udp", desc = "DNS for CoreDNS",      roles = ["master", "ha", "worker"] },
+    { from = 5432,  to = 5432,  protocol = "tcp", desc = "PostgreSQL access",    roles = ["master"] }
   ]
 }
 
@@ -66,12 +73,12 @@ resource "aws_security_group" "k3s_sg" {
         local.default_rules,
         [
           for i in range(length(var.custom_ingress_ports)) : {
-            from  = var.custom_ingress_ports[i].from
-            to    = var.custom_ingress_ports[i].to
+            from     = var.custom_ingress_ports[i].from
+            to       = var.custom_ingress_ports[i].to
             protocol = var.custom_ingress_ports[i].protocol
-            desc  = "Custom rule for ${var.custom_ingress_ports[i].protocol}"
-            roles = ["master", "ha", "worker"]
-            source = var.custom_ingress_ports[i].source
+            desc     = "Custom rule for ${var.custom_ingress_ports[i].protocol}"
+            roles    = ["master", "ha", "worker"]
+            source   = var.custom_ingress_ports[i].source
           }
         ]
       ) : idx => rule if contains(rule.roles, var.k3s_role)
@@ -100,7 +107,6 @@ resource "aws_security_group" "k3s_sg" {
         var.custom_egress_ports
       ) : idx => rule
     }
-
     content {
       from_port   = egress.value.from
       to_port     = egress.value.to
@@ -116,53 +122,116 @@ resource "aws_security_group" "k3s_sg" {
 }
 
 resource "aws_instance" "k3s_node" {
-  ami                    = var.ami
-  instance_type          = var.instance_type
-  key_name = replace(basename(var.ssh_key), ".pem", "")
+  ami           = var.ami
+  instance_type = var.instance_type
+  key_name      = replace(basename(var.ssh_key), ".pem", "")
 
-  # Use the provided security group ID if available or the one created by the security group resource.
   vpc_security_group_ids = var.security_group_id != "" ? [var.security_group_id] : [aws_security_group.k3s_sg[0].id]
 
   tags = {
-    Name        = "${var.resource_name}"
+    Name        = var.resource_name
     k3sToken    = var.k3s_token
     ClusterName = var.cluster_name
     Role        = var.k3s_role
   }
+}
 
-  # Upload the rendered user data script to the VM
-  provisioner "file" {
-    content = templatefile("${path.module}/${var.k3s_role}_user_data.sh.tpl", {
-      ha           = var.ha,
-      k3s_token    = var.k3s_token,
-      master_ip    = var.master_ip,
-      cluster_name = var.cluster_name,
-      public_ip  = self.public_ip,
-      resource_name = "${var.resource_name}"
-    })
-    destination = "/tmp/k3s_user_data.sh"
-  }
+# Standalone master (no HA)
+resource "k3s_server" "k3s" {
+  count = (var.k3s_role == "master" && !var.ha) ? 1 : 0
 
-  provisioner "remote-exec" {
-    inline = [
-      "rm -f ~/.ssh/known_hosts",
-      "echo 'Executing remote provisioning script on ${var.k3s_role} node'",
-      "chmod +x /tmp/k3s_user_data.sh",
-      "sudo /tmp/k3s_user_data.sh"
-    ]
-  }
-
-  connection {
-    type        = "ssh"
-    user        = var.ssh_user
+  auth = {
+    host        = aws_instance.k3s_node.public_ip,
+    user        = var.ssh_user,
     private_key = file(var.ssh_key)
-    host        = self.public_ip
   }
+
+  config = <<-EOT
+    node-name: ${var.resource_name}
+    token: ${var.k3s_token}
+    cluster-name: ${var.cluster_name}
+  EOT
+
+  depends_on = [aws_instance.k3s_node]
+}
+
+# HA init node — first server that bootstraps the cluster
+resource "k3s_server" "k3s_ha_init" {
+  count = (var.k3s_role == "master" && var.ha) ? 1 : 0
+
+  auth = {
+    host        = aws_instance.k3s_node.public_ip,
+    user        = var.ssh_user,
+    private_key = file(var.ssh_key)
+  }
+
+  config = <<-EOT
+    node-name: ${var.resource_name}
+    token: ${var.k3s_token}
+    cluster-name: ${var.cluster_name}
+  EOT
+
+  highly_available = {
+    cluster_init = true
+  }
+
+  depends_on = [aws_instance.k3s_node]
+}
+
+# HA join node — subsequent server nodes joining an existing master
+resource "k3s_server" "k3s_ha_join" {
+  count = var.k3s_role == "ha" ? 1 : 0
+
+  auth = {
+    host        = aws_instance.k3s_node.public_ip,
+    user        = var.ssh_user,
+    private_key = file(var.ssh_key)
+  }
+
+  config = <<-EOT
+    node-name: ${var.resource_name}
+    token: ${var.k3s_token}
+  EOT
+
+  highly_available = {
+    cluster_init = false
+    server       = "https://${var.master_ip}:6443"
+    token        = var.k3s_token
+  }
+
+  depends_on = [aws_instance.k3s_node]
+}
+
+# Worker node
+resource "k3s_agent" "k3s" {
+  count = var.k3s_role == "worker" ? 1 : 0
+
+  auth = {
+    host        = aws_instance.k3s_node.public_ip,
+    user        = var.ssh_user,
+    private_key = file(var.ssh_key)
+  }
+
+  server = "https://${var.master_ip}:6443"
+  token  = var.k3s_token
+
+  kubeconfig = "/etc/rancher/k3s/k3s.yaml"
+
+  config = <<-EOT
+    node-name: ${var.resource_name}
+  EOT
+
+  allow_delete_err = true
+  depends_on = [aws_instance.k3s_node]
 }
 
 # outputs.tf
 output "cluster_name" {
   value = aws_instance.k3s_node.tags["ClusterName"]
+}
+
+output "k3s_role" {
+  value = aws_instance.k3s_node.tags["Role"]
 }
 
 output "master_ip" {
