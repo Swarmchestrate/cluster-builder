@@ -6,6 +6,15 @@ import logging
 import re
 
 logger = logging.getLogger("cluster_builder")
+
+def sanitize_module_name(module_name: str) -> str:
+    """Convert a module name into a valid Terraform identifier."""
+    sanitized = re.sub(r'[^A-Za-z0-9_]', '_', module_name)
+    if re.match(r'^[0-9]', sanitized):
+        sanitized = f"_{sanitized}"
+    return sanitized
+
+
 def add_backend_config(backend_tf_path, conn_str, schema_name):
     """
     Adds a PostgreSQL backend configuration to a Terraform file.
@@ -152,7 +161,7 @@ def simple_remove_module(tree, module_name, removed=False):
                     and is_target_module_block(child, module_name)
                 ):
                     removed = True
-                    print(f"Module {module_name} found and removed.")  # Debug log
+                    logger.debug(f"Module {module_name} found and removed.")  # Debug log
 
                     # Check if the next node is a new_line_or_comment, and skip it as well
                     if i + 1 < len(body_node.children):
