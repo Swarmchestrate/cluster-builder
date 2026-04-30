@@ -2,6 +2,7 @@
 Template management for cluster deployments.
 """
 
+import filecmp
 import os
 import shutil
 import logging
@@ -35,37 +36,51 @@ class TemplateManager:
         """
         return f"{self.templates_dir}/{cloud}/"
 
-    def create_provider_config(self, cluster_dir: str, cloud: str) -> None:
+    def create_provider_config(self, cluster_dir: str, cloud: str | None = None, all_providers: bool = False) -> None:
         """
-        Create provider configuration file for all the supported cloud.
+        Create provider configuration files for the cluster.
 
         Args:
             cluster_dir: Directory for the cluster
-            cloud: Cloud provider (e.g., 'aws')
+            cloud: Cloud provider (e.g., 'aws'). Ignored when all_providers=True.
+            all_providers: If True, copy all available provider files (used for destroy)
 
         Raises:
-            ValueError: If provider template is not found
+            ValueError: If the cloud-specific provider template is not found
         """
+        if all_providers:
+            # Copy every *_provider.tf found in templates dir — needed for destroy
+            provider_files = [
+                f for f in os.listdir(self.templates_dir)
+                if f.endswith("_provider.tf")
+            ]
+        else:
+            if not cloud:
+                raise ValueError("Cloud provider must be specified when not copying all providers")
+            provider_files = [f"{cloud}_provider.tf", "k3s_provider.tf"]
 
-        # List all expected provider templates in the templates directory
-        provider_templates = [
-            f for f in os.listdir(self.templates_dir) if f.endswith("_provider.tf")
-        ]
-
-        if not provider_templates:
-            error_msg = f"No provider templates found in {self.templates_dir}"
-            logger.error(error_msg)
-            raise ValueError(error_msg)
-
-        # Copy each provider template to the cluster directory
-        for template_file in provider_templates:
+        for template_file in provider_files:
             src_path = os.path.join(self.templates_dir, template_file)
             dst_path = os.path.join(cluster_dir, template_file)
 
             if not os.path.exists(src_path):
-                error_msg = f"Provider template missing: {src_path}"
-                logger.error(error_msg)
-                raise ValueError(error_msg)
+                # k3s_provider.tf missing is only fatal on the add_node path
+                if template_file == "k3s_provider.tf":
+                    logger.warning(f"k3s_provider.tf not found at {src_path}, skipping")
+                    continue
+                if not all_providers:
+                    error_msg = f"Provider template missing: {src_path}"
+                    logger.error(error_msg)
+                    raise ValueError(error_msg)
+                else:
+                    logger.debug(f"Provider template not found, skipping: {src_path}")
+                    continue
+
+            if os.path.exists(dst_path):
+                if filecmp.cmp(src_path, dst_path, shallow=False):
+                    logger.debug(f"Provider config already exists and is up to date: {dst_path}")
+                    continue
+                logger.info(f"Updating provider config from template: {template_file}")
 
             try:
                 shutil.copy2(src_path, dst_path)
@@ -75,7 +90,7 @@ class TemplateManager:
                 logger.error(error_msg)
                 raise RuntimeError(error_msg)
 
-        logger.debug(f"✅ All provider templates copied to cluster directory {cluster_dir}")
+        logger.debug(f"✅ Provider configurations ensured in cluster directory {cluster_dir}")
 
     def copy_user_data_template(self, role: str, cloud: str) -> None:
         """
