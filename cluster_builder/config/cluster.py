@@ -8,6 +8,7 @@ import secrets
 import string
 from names_generator import generate_name
 
+from typing import Any
 from cluster_builder.infrastructure import TemplateManager
 
 logger = logging.getLogger("swarmchestrate")
@@ -70,7 +71,7 @@ class ClusterConfig:
         logger.debug(f"Generated K3s token: {token}")
         return token
 
-    def prepare(self, config: dict[str, any]) -> tuple[str, dict[str, any]]:
+    def prepare(self, config: dict[str, Any]) -> tuple[str, dict[str, Any]]:
         """
         Prepare the configuration and template files for deployment.
 
