@@ -21,7 +21,10 @@ master_ip = outputs.get("master_ip")
 resource_name = outputs.get("resource_name")
 
 if not master_ip:
-    logger.error("❌ Could not retrieve master IP from outputs for cluster '%s'", cluster_name or "unknown")
+    logger.error(
+        "❌ Could not retrieve master IP from outputs for cluster '%s'",
+        cluster_name or "unknown",
+    )
     raise RuntimeError("Could not retrieve master IP from outputs")
 
 logger.info(f"[INFO] Cluster name: {cluster_name}")
