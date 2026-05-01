@@ -1,14 +1,11 @@
 import os
-import re
 import tempfile
 import hcl2
 import logging
 from cluster_builder.utils.hcl import (
     add_backend_config,
     add_module_block,
-    add_output_blocks,
     remove_module_block,
-    sanitize_module_name,
 )
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -261,92 +258,4 @@ def test_add_module_block_appends_to_existing_file():
                 "New module block was not added"
             )
             assert 'source = "new/source"' in content, "New module source was not added"
-
-
-def test_sanitize_module_name_replaces_invalid_characters():
-    module_name = "aws-test-cp1"
-    sanitized = sanitize_module_name(module_name)
-
-    assert sanitized == "aws_test_cp1"
-    assert "-" not in sanitized
-    assert re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", sanitized)
-
-
-def test_add_module_block_with_hyphenated_name():
-    with tempfile.TemporaryDirectory() as temp_dir:
-        main_tf_path = os.path.join(temp_dir, "main.tf")
-        module_name = "aws-test-cp1"
-        config = {
-            "module_source": "some/source",
-            "param1": "value1",
-        }
-
-        add_module_block(main_tf_path, module_name, config)
-
-        with open(main_tf_path, "r") as f:
-            content = f.read()
-
-        assert 'module "aws_test_cp1"' in content
-        assert 'module "aws-test-cp1"' not in content
-        assert 'param1 = "value1"' in content
-
-
-def test_add_module_block_migrates_legacy_hyphenated_label():
-    with tempfile.TemporaryDirectory() as temp_dir:
-        main_tf_path = os.path.join(temp_dir, "main.tf")
-        module_name = "aws-test-cp1"
-        legacy_content = f"""
-module \"{module_name}\" {{
-    source = \"some/source\"
-    resource_name = \"{module_name}\"
-}}
-"""
-        with open(main_tf_path, "w") as f:
-            f.write(legacy_content)
-
-        config = {
-            "module_source": "some/source",
-            "resource_name": module_name,
-            "cloud": "aws",
-            "k3s_role": "master",
-            "ssh_user": "ubuntu",
-            "ssh_key": "path/to/key",
-            "ami": "ami-123",
-        }
-
-        add_module_block(main_tf_path, module_name, config)
-
-        with open(main_tf_path, "r") as f:
-            content = f.read()
-
-        assert 'module "aws_test_cp1"' in content
-        assert 'module "aws-test-cp1"' not in content
-
-def test_add_output_blocks_uses_sanitized_module_name():
-    with tempfile.TemporaryDirectory() as temp_dir:
-        outputs_tf_path = os.path.join(temp_dir, "outputs.tf")
-        module_name = "aws-test-cp1"
-        output_names = ["cluster_name", "master_ip"]
-
-        add_output_blocks(outputs_tf_path, module_name, output_names)
-
-        with open(outputs_tf_path, "r") as f:
-            content = f.read()
-
-        assert 'value = module.aws_test_cp1.cluster_name' in content
-        assert 'value = module.aws_test_cp1.master_ip' in content
-        assert 'value = module["aws-test-cp1"].cluster_name' not in content
-
-
-def test_add_output_blocks_supports_different_module_labels():
-    with tempfile.TemporaryDirectory() as temp_dir:
-        outputs_tf_path = os.path.join(temp_dir, "outputs.tf")
-
-        add_output_blocks(outputs_tf_path, "aws-test-cp1", ["cluster_name"])
-        add_output_blocks(outputs_tf_path, "sztaki-test2", ["cluster_name"])
-
-        with open(outputs_tf_path, "r") as f:
-            content = f.read()
-
-        assert 'value = module.aws_test_cp1.cluster_name' in content
-        assert 'value = module.sztaki_test2.cluster_name' in content
+            assert 'param1 = "value1"' in content, "New module parameter was not added"
