@@ -1,10 +1,1 @@
-terraform {
-  required_providers {
-    local = {
-      source  = "hashicorp/local"
-    }
-    template = {
-      source  = "hashicorp/template"
-    }
-  }
-}
+# Edge cluster provider configuration is handled by the root k3s provider template.
