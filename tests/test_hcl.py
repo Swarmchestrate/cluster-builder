@@ -7,9 +7,11 @@ from cluster_builder.utils.hcl import (
     add_module_block,
     remove_module_block,
 )
+
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+
 
 def test_add_backend_config_creates_file():
     logger.debug("Starting test_add_backend_config_creates_file...")
@@ -58,8 +60,13 @@ def test_add_backend_config_skips_existing_file():
         with open(backend_tf_path, "r") as f:
             content = f.read()
             logger.debug("Backend TF content: %s", content)
-            assert 'conn_str = "existing"' in content, "Existing content was overwritten"
-            assert 'schema_name = "existing"' in content, "Existing content was overwritten"
+            assert 'conn_str = "existing"' in content, (
+                "Existing content was overwritten"
+            )
+            assert 'schema_name = "existing"' in content, (
+                "Existing content was overwritten"
+            )
+
 
 def test_remove_module_block_removes_existing_module():
     logger.info("Starting test_remove_module_block_removes_existing_module...")
@@ -78,14 +85,18 @@ def test_remove_module_block_removes_existing_module():
         logger.info("Initial main.tf content:\n%r", content)
 
         # Act
-        logger.info("Calling remove_module_block with file=%s and module_name=%s", main_tf_path, module_name)
+        logger.info(
+            "Calling remove_module_block with file=%s and module_name=%s",
+            main_tf_path,
+            module_name,
+        )
         remove_module_block(main_tf_path, module_name)
 
         # Assert
         with open(main_tf_path, "r") as f:
             remaining_content = f.read()
             logger.info("Remaining content after removal: %s", remaining_content)
-        
+
         logger.info("Remaining content after removal:\n%r", remaining_content)
 
         # Debug check: does it still contain module name?

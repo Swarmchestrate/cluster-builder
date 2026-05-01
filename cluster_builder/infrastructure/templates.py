@@ -17,8 +17,8 @@ class TemplateManager:
 
     def __init__(self):
         """Initialise the TemplateManager."""
-        current_dir = os.path.dirname(os.path.abspath(__file__))  
-        self.base_dir = os.path.dirname(current_dir) # templates directory
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        self.base_dir = os.path.dirname(current_dir)  # templates directory
         self.templates_dir = os.path.join(self.base_dir, "templates")
         logger.debug(
             f"Initialised TemplateManager with templates_dir={self.templates_dir}"
@@ -36,7 +36,9 @@ class TemplateManager:
         """
         return f"{self.templates_dir}/{cloud}/"
 
-    def create_provider_config(self, cluster_dir: str, cloud: str | None = None, all_providers: bool = False) -> None:
+    def create_provider_config(
+        self, cluster_dir: str, cloud: str | None = None, all_providers: bool = False
+    ) -> None:
         """
         Create provider configuration files for the cluster.
 
@@ -51,12 +53,13 @@ class TemplateManager:
         if all_providers:
             # Copy every *_provider.tf found in templates dir — needed for destroy
             provider_files = [
-                f for f in os.listdir(self.templates_dir)
-                if f.endswith("_provider.tf")
+                f for f in os.listdir(self.templates_dir) if f.endswith("_provider.tf")
             ]
         else:
             if not cloud:
-                raise ValueError("Cloud provider must be specified when not copying all providers")
+                raise ValueError(
+                    "Cloud provider must be specified when not copying all providers"
+                )
             provider_files = [f"{cloud}_provider.tf", "k3s_provider.tf"]
 
         for template_file in provider_files:
@@ -78,7 +81,9 @@ class TemplateManager:
 
             if os.path.exists(dst_path):
                 if filecmp.cmp(src_path, dst_path, shallow=False):
-                    logger.debug(f"Provider config already exists and is up to date: {dst_path}")
+                    logger.debug(
+                        f"Provider config already exists and is up to date: {dst_path}"
+                    )
                     continue
                 logger.info(f"Updating provider config from template: {template_file}")
 
@@ -90,7 +95,9 @@ class TemplateManager:
                 logger.error(error_msg)
                 raise RuntimeError(error_msg)
 
-        logger.debug(f"✅ Provider configurations ensured in cluster directory {cluster_dir}")
+        logger.debug(
+            f"✅ Provider configurations ensured in cluster directory {cluster_dir}"
+        )
 
     def copy_user_data_template(self, role: str, cloud: str) -> None:
         """

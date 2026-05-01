@@ -67,7 +67,7 @@ class ClusterConfig:
             A secure, randomly generated alphanumeric token
         """
         chars = string.ascii_letters + string.digits
-        token = ''.join(secrets.choice(chars) for _ in range(length))
+        token = "".join(secrets.choice(chars) for _ in range(length))
         logger.debug(f"Generated K3s token: {token}")
         return token
 
@@ -137,7 +137,9 @@ class ClusterConfig:
             prepared_config["resource_name"] = f"{cloud}-{random_name}"
             logger.debug(f"Resource name: {prepared_config['resource_name']}")
         else:
-            logger.debug(f" Using provided Resource name: {prepared_config['resource_name']}")
+            logger.debug(
+                f" Using provided Resource name: {prepared_config['resource_name']}"
+            )
 
         # Create the cluster directory
         try:
