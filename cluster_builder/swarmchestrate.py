@@ -8,7 +8,7 @@ import logging
 from pathlib import Path
 import shutil
 import subprocess
-from typing import Optional
+from typing import Optional, Any
 import psycopg2
 from openstack import connection
 from dotenv import load_dotenv
@@ -31,7 +31,7 @@ class Swarmchestrate:
         self,
         template_dir: str,
         output_dir: str,
-        variables: Optional[dict[str, any]] = None,
+        variables: Optional[dict[str, Any]] = None,
     ):
         """
         Initialise the Swarmchestrate class.
@@ -73,7 +73,9 @@ class Swarmchestrate:
         """
         return self.cluster_config.get_cluster_output_dir(cluster_name)
 
-    def get_unused_floating_ip(self, first_only: bool = True) -> str | list[str] | None:
+    def get_unused_floating_ip(
+        self, first_only: bool = True
+    ) -> dict[str, Any] | list[dict[str, Any]] | None:
         """
         Fetch unused floating IP(s) from OpenStack using application credentials
         loaded from environment variables.
@@ -101,13 +103,17 @@ class Swarmchestrate:
         conn = connection.Connection(
             auth_url=os.environ["TF_VAR_openstack_auth_url"],
             auth_type="v3applicationcredential",
-            application_credential_id=os.environ["TF_VAR_openstack_application_credential_id"],
-            application_credential_secret=os.environ["TF_VAR_openstack_application_credential_secret"],
+            application_credential_id=os.environ[
+                "TF_VAR_openstack_application_credential_id"
+            ],
+            application_credential_secret=os.environ[
+                "TF_VAR_openstack_application_credential_secret"
+            ],
         )
 
-        unused_ips = [
+        unused_ips: list[dict[str, Any]] = [
             {"id": ip.id, "address": ip.floating_ip_address}
-            for ip in conn.network.ips()
+            for ip in conn.network.ips()  # type: ignore[attr-defined]
             if not ip.port_id
         ]
 
@@ -122,7 +128,7 @@ class Swarmchestrate:
         logger.info(f"Found {len(unused_ips)} unused floating IPs")
         return unused_ips
 
-    def validate_configuration(self, cloud: str, config: dict) -> list:
+    def validate_configuration(self, cloud: str, config: dict[str, Any]) -> list[str]:
         """
         Validate a configuration against the required variables for a cloud provider.
 
@@ -133,19 +139,30 @@ class Swarmchestrate:
         Returns:
             List of missing required variables (empty if all required variables are present)
         """
-        logger.debug(f"Validating configuration for cloud={cloud}, role={config.get('k3s_role')}")
+        logger.debug(
+            f"Validating configuration for cloud={cloud}, role={config.get('k3s_role')}"
+        )
         if cloud == "openstack" and "floating_ip" not in config:
-            logger.info("OpenStack detected and floating_ip not provided, attempting auto-discovery")
+            logger.info(
+                "OpenStack detected and floating_ip not provided, attempting auto-discovery"
+            )
 
             floating_ip_info = self.get_unused_floating_ip(first_only=True)
-            if not floating_ip_info:
-                raise RuntimeError("No unused floating IPs available in OpenStack for the project")
+            if floating_ip_info is None:
+                raise RuntimeError(
+                    "No unused floating IPs available in OpenStack for the project"
+                )
 
+            assert isinstance(floating_ip_info, dict)
             # Inject separately
-            config["floating_ip"] = floating_ip_info["address"]      # For SSH, outputs, scripts
-            config["floating_ip_id"] = floating_ip_info["id"]        # For Terraform association
+            config["floating_ip"] = floating_ip_info[
+                "address"
+            ]  # For SSH, outputs, scripts
+            config["floating_ip_id"] = floating_ip_info[
+                "id"
+            ]  # For Terraform association
 
-            logger.info(
+            logger.debug(
                 f"Injected floating_ip={config['floating_ip']} and floating_ip_id={config['floating_ip_id']} into configuration"
             )
         # Master IP validation
@@ -161,7 +178,9 @@ class Swarmchestrate:
 
         # Worker/HA nodes require a master IP
         if not has_master_ip and role in ["worker", "ha"]:
-            logger.error(f"Invalid configuration: Role '{role}' requires master_ip to be specified")
+            logger.error(
+                f"Invalid configuration: Role '{role}' requires master_ip to be specified"
+            )
             raise ValueError(f"Role '{role}' requires master_ip to be specified")
 
         required_vars = self.template_manager.get_required_variables(cloud)
@@ -181,8 +200,8 @@ class Swarmchestrate:
         return missing_vars
 
     def prepare_infrastructure(
-        self, config: dict[str, any]
-    ) -> tuple[str, dict[str, any]]:
+        self, config: dict[str, Any]
+    ) -> tuple[str, dict[str, Any]]:
         """
         Prepare infrastructure configuration for deployment.
 
@@ -205,7 +224,7 @@ class Swarmchestrate:
             # Prepare the configuration
             cluster_dir, prepared_config = self.cluster_config.prepare(config)
             logger.debug(f"Cluster directory prepared at: {cluster_dir}")
-        
+
             # Validate the configuration
             cloud = prepared_config["cloud"]
             missing_vars = self.validate_configuration(cloud, prepared_config)
@@ -216,10 +235,10 @@ class Swarmchestrate:
             logger.debug(f"Configuration validated for cloud: {cloud}")
 
             # Create provider configuration
-            
+
             self.template_manager.create_provider_config(cluster_dir, cloud)
             logger.debug(f"Created provider configuration for {cloud}")
-            
+
             # Create Terraform files
             main_tf_path = os.path.join(cluster_dir, "main.tf")
             backend_tf_path = os.path.join(cluster_dir, "backend.tf")
@@ -236,7 +255,7 @@ class Swarmchestrate:
             logger.debug(f"Added backend configuration to {backend_tf_path}")
 
             # Add module block
-            target = prepared_config["resource_name"]
+            target = hcl.sanitize_module_name(prepared_config["resource_name"])
             hcl.add_module_block(main_tf_path, target, prepared_config)
             logger.debug(f"Added module block to {main_tf_path}")
             logger.debug("Infrastructure preparation complete.")
@@ -248,7 +267,7 @@ class Swarmchestrate:
             logger.error(error_msg)
             raise RuntimeError(error_msg)
 
-    def add_node(self, config: dict[str, any], dryrun: bool = False) -> dict:
+    def add_node(self, config: dict[str, Any], dryrun: bool = False) -> dict:
         """
         Add a node to an existing cluster or create a new cluster based on configuration.
 
@@ -268,43 +287,38 @@ class Swarmchestrate:
             RuntimeError: If preparation or deployment fails
         """
         # Prepare the infrastructure configuration
-        
+
         cluster_dir, prepared_config = self.prepare_infrastructure(config)
         role = prepared_config["k3s_role"]
-        if prepared_config.get("cloud") == "openstack":
-            logger.info("OpenStack deployment detected, checking for unused floating IP")
+        cloud = prepared_config.get("cloud")
+        module_name = hcl.sanitize_module_name(prepared_config["resource_name"])
 
-            floating_ip = self.get_unused_floating_ip(first_only=True)
+        logger.info(
+            f"---------- Starting deployment of {module_name} ({role}) ----------"
+        )
 
-            if not floating_ip:
-                raise RuntimeError(
-                    "Deployment aborted: no unused floating IPs available."
-                    "Cloud admin must allocate floating IPs to the project."
-                )
-
-            config["floating_ip"] = floating_ip["address"]
-            config["floating_ip_id"] = floating_ip["id"]         
-        
-        # Add output blocks for the module you just added
-        module_name = prepared_config["resource_name"]
-        logger.info(f"---------- Starting deployment of {module_name} ({role}) ----------")
-        outputs_file = os.path.join(cluster_dir, "outputs.tf")
-        
-        # Define common output names
-        output_names = ["cluster_name", "master_ip", "worker_ip", "ha_ip", "k3s_token", "resource_name"]
-        
-        # Include additional outputs based on the cloud type
-        if "aws" in cluster_dir:
+        output_names = [
+            "cluster_name",
+            "master_ip",
+            "worker_ip",
+            "ha_ip",
+            "k3s_token",
+            "resource_name",
+            "k3s_role",
+        ]
+        if cloud == "aws":
             output_names.append("instance_status")
-        elif "openstack" in cluster_dir:
+        elif cloud == "openstack":
             output_names.append("instance_power_state")
+        elif cloud == "edge":
+            output_names.append("edge_device_ip")
 
-        # Add output blocks
-        hcl.add_output_blocks(outputs_file, module_name, output_names)
+        hcl.add_output_blocks(
+            os.path.join(cluster_dir, "outputs.tf"), module_name, output_names
+        )
 
         logger.info(f"Adding node to cluster '{prepared_config['cluster_name']}'")
 
-        # Deploy the infrastructure
         try:
             self.deploy(cluster_dir, module_name, dryrun)
             cluster_name = prepared_config["cluster_name"]
@@ -312,7 +326,32 @@ class Swarmchestrate:
             logger.info(
                 f"✅ Successfully added '{resource_name}' for cluster '{cluster_name}'"
             )
-            # Run 'tofu output -json' to get outputs
+
+            # ── Edge: all outputs are known variables, no resource attributes ──
+            # Skip tofu output entirely — build from prepared_config directly.
+            if cloud == "edge":
+                edge_ip = prepared_config.get("edge_device_ip")
+                result_outputs = {
+                    "cluster_name": prepared_config.get("cluster_name"),
+                    "master_ip": edge_ip
+                    if role == "master"
+                    else prepared_config.get("master_ip"),
+                    "worker_ip": edge_ip if role == "worker" else None,
+                    "ha_ip": edge_ip if role == "ha" else None,
+                    "k3s_token": prepared_config.get("k3s_token"),
+                    "resource_name": prepared_config.get("resource_name"),
+                    "k3s_role": role,
+                    "edge_device_ip": edge_ip,
+                }
+                logger.info(
+                    f"----------- Deployment of {role} node successful -----------"
+                )
+                logger.info(f"Deployment outputs: {result_outputs}")
+                return result_outputs
+
+            # ── AWS / OpenStack: outputs depend on real resource attributes ──
+            # Stay in the node workspace (deploy() leaves it selected) and read.
+            env_vars = os.environ.copy()
             result = subprocess.run(
                 ["tofu", "output", "-json"],
                 cwd=cluster_dir,
@@ -320,39 +359,57 @@ class Swarmchestrate:
                 stderr=subprocess.PIPE,
                 text=True,
                 check=True,
+                env=env_vars,
             )
-            outputs = json.loads(result.stdout)
 
-            # Extract output values for all required fields
+            raw = result.stdout.strip()
+            if not raw:
+                raise RuntimeError(
+                    "tofu output -json returned empty — state may not be committed yet"
+                )
+
+            outputs = json.loads(raw)
+
+            def get_val(key):
+                return outputs.get(key, {}).get("value")
+
             result_outputs = {
-                "cluster_name": outputs.get("cluster_name", {}).get("value"),
-                "master_ip": outputs.get("master_ip", {}).get("value"),
-                "k3s_token": outputs.get("k3s_token", {}).get("value"),
-                "worker_ip": outputs.get("worker_ip", {}).get("value"),
-                "ha_ip": outputs.get("ha_ip", {}).get("value"),
-                "resource_name": outputs.get("resource_name", {}).get("value")
+                "cluster_name": get_val("cluster_name"),
+                "master_ip": get_val("master_ip"),
+                "k3s_token": get_val("k3s_token"),
+                "worker_ip": get_val("worker_ip"),
+                "ha_ip": get_val("ha_ip"),
+                "resource_name": get_val("resource_name"),
+                "k3s_role": get_val("k3s_role"),
             }
-            # Add cloud-specific output
-            if "aws" in cluster_dir:
-                result_outputs["instance_status"] = outputs.get("instance_status", {}).get("value")
-            elif "openstack" in cluster_dir:
-                result_outputs["instance_power_state"] = outputs.get("instance_power_state", {}).get("value")
+
+            if cloud == "aws":
+                result_outputs["instance_status"] = get_val("instance_status")
+            elif cloud == "openstack":
+                result_outputs["instance_power_state"] = get_val("instance_power_state")
+
+            # Warn if anything critical is missing
+            missing = [
+                k
+                for k in ("cluster_name", "master_ip", "k3s_token")
+                if not result_outputs.get(k)
+            ]
+            if missing:
+                logger.warning(f"⚠️ Critical outputs are None after deploy: {missing}")
 
             logger.info(f"----------- Deployment of {role} node successful -----------")
-            logger.debug(f"Deployment outputs: {result_outputs}")
-
+            logger.info(f"Deployment outputs: {result_outputs}")
             return result_outputs
 
         except subprocess.CalledProcessError as e:
             error_msg = f"❌ Failed to get outputs: {e.stderr.strip()}"
             logger.error(error_msg)
             raise RuntimeError(error_msg)
-        
+
         except Exception as e:
             error_msg = f"❌ Failed to add node: {e}"
             logger.error(error_msg)
             raise RuntimeError(error_msg)
-
 
     def remove_node(
         self, cluster_name: str, resource_name: str, dryrun: bool = False
@@ -366,15 +423,16 @@ class Swarmchestrate:
 
         Args:
             cluster_name: Name of the cluster
-            resource_name: Node name in K3s and module name in main.tf / OpenTofu
-            is_edge: True if the node is pre-provisioned (edge node)
+            resource_name: Node name/resource to remove
             dryrun: If True, only simulate actions without executing
 
         Raises:
             RuntimeError: If node removal fails
         """
-    
-        logger.info(f"------------ Removing node '{resource_name}' from cluster '{cluster_name}' ------------")
+
+        logger.info(
+            f"------------ Removing node '{resource_name}' from cluster '{cluster_name}' ------------"
+        )
 
         # Get the directory for the specified cluster
         cluster_dir = self.get_cluster_output_dir(cluster_name)
@@ -383,7 +441,7 @@ class Swarmchestrate:
             error_msg = f"Cluster directory '{cluster_dir}' not found"
             logger.error(error_msg)
             raise RuntimeError(error_msg)
-        
+
         env_vars = os.environ.copy()
 
         # Path to main.tf
@@ -405,7 +463,7 @@ class Swarmchestrate:
                 )
             else:
                 logger.info(f"Dryrun: select workspace '{resource_name}'")
-            
+
             # Destroy the infrastructure
             if not dryrun:
                 CommandExecutor.run_command(
@@ -415,7 +473,9 @@ class Swarmchestrate:
                     env=env_vars,
                 )
             else:
-                logger.info(f"Dryrun: would destroy infrastructure for '{resource_name}'")
+                logger.info(
+                    f"Dryrun: would destroy infrastructure for '{resource_name}'"
+                )
 
             # Switch back to default workspace
             if not dryrun:
@@ -436,17 +496,22 @@ class Swarmchestrate:
             outputs_tf_path = os.path.join(cluster_dir, "outputs.tf")
             if os.path.exists(outputs_tf_path):
                 os.remove(outputs_tf_path)
-                logger.debug(f"Deleted outputs.tf to ensure stale outputs do not affect 'tofu apply' for '{resource_name}'")
+                logger.debug(
+                    f"Deleted outputs.tf to ensure stale outputs do not affect 'tofu apply' for '{resource_name}'"
+                )
 
             # Apply OpenTofu configuration to update state
             if not dryrun:
                 CommandExecutor.run_command(
                     ["tofu", "apply", "-auto-approve"],
                     cwd=cluster_dir,
-                    description=f"Applying OpenTofu configuration after removing node {resource_name}", env=env_vars
+                    description=f"Applying OpenTofu configuration after removing node {resource_name}",
+                    env=env_vars,
                 )
             else:
-                logger.info(f"Dryrun: would apply OpenTofu configuration after removing node '{resource_name}'")
+                logger.info(
+                    f"Dryrun: would apply OpenTofu configuration after removing node '{resource_name}'"
+                )
 
             # Delete the workspace
             if not dryrun:
@@ -459,14 +524,18 @@ class Swarmchestrate:
             else:
                 logger.info(f"Dryrun: would delete workspace '{resource_name}'")
 
-            logger.info(f"----------- Removal of node '{resource_name}' from cluster '{cluster_name}' complete -----------")
+            logger.info(
+                f"----------- Removal of node '{resource_name}' from cluster '{cluster_name}' complete -----------"
+            )
 
-        except RuntimeError  as e:
+        except RuntimeError as e:
             error_msg = f"❌ Failed to remove node '{resource_name}' from cluster '{cluster_name}': {str(e)}"
             logger.error(error_msg)
             raise RuntimeError(error_msg)
 
-    def deploy(self, cluster_dir: str,workspace: str = "default", dryrun: bool = False) -> None:
+    def deploy(
+        self, cluster_dir: str, workspace: str = "default", dryrun: bool = False
+    ) -> None:
         """
         Execute OpenTofu commands to deploy the K3s component with error handling.
 
@@ -504,8 +573,10 @@ class Swarmchestrate:
             if dryrun:
                 logger.info("Dryrun: will init without backend and validate only")
                 init_command.append("-backend=false")
-            CommandExecutor.run_command(init_command, cluster_dir, "OpenTofu init", env=env_vars)
-            
+            CommandExecutor.run_command(
+                init_command, cluster_dir, "OpenTofu init", env=env_vars
+            )
+
             # Create/select workspace
             try:
                 result = subprocess.run(
@@ -516,7 +587,9 @@ class Swarmchestrate:
                     check=True,
                     env=env_vars,
                 )
-                existing_workspaces = [line.strip("* ").strip() for line in result.stdout.splitlines()]
+                existing_workspaces = [
+                    line.strip("* ").strip() for line in result.stdout.splitlines()
+                ]
             except subprocess.CalledProcessError as e:
                 error_msg = f"❌ Failed to list workspaces: {e.stderr or str(e)}"
                 logger.error(error_msg)
@@ -567,8 +640,12 @@ class Swarmchestrate:
 
             # Apply the deployment
             CommandExecutor.run_command(
-                ["tofu", "apply", "-auto-approve", f"-target=module.{workspace}"], cluster_dir, f"OpenTofu apply for {workspace}", env=env_vars
+                ["tofu", "apply", "-auto-approve", f"-target=module.{workspace}"],
+                cluster_dir,
+                f"OpenTofu apply for {workspace}",
+                env=env_vars,
             )
+
             logger.info("Infrastructure successfully updated")
 
         except RuntimeError as e:
@@ -594,9 +671,7 @@ class Swarmchestrate:
 
         # Fail early if the cluster directory does not exist
         if not os.path.exists(cluster_dir):
-            error_msg = f"❌ Cluster directory '{cluster_dir}' not found. Cannot safely destroy."
-            logger.error(error_msg)
-            raise RuntimeError(error_msg)
+            raise RuntimeError(f"❌ Cluster directory '{cluster_dir}' not found")
 
         # Dry-run mode
         if dryrun:
@@ -604,115 +679,183 @@ class Swarmchestrate:
             shutil.rmtree(cluster_dir, ignore_errors=True)
             return
 
-        # Ensure backend exists
-        backend_tf_path = os.path.join(cluster_dir, "backend.tf")
+        self.template_manager.create_provider_config(cluster_dir, all_providers=True)
 
+        backend_tf_path = os.path.join(cluster_dir, "backend.tf")
         conn_str = self.pg_config.get_connection_string()
         hcl.add_backend_config(backend_tf_path, conn_str, schema_name=cluster_name)
 
         env_vars = os.environ.copy()
         env_vars["TF_IN_AUTOMATION"] = "true"
 
-        # Initialize OpenTofu
-        try:
-            CommandExecutor.run_command(
-                ["tofu", "init", "-reconfigure"],
-                cluster_dir, "initializing backend", env=env_vars
-            )
-            logger.debug(" Backend initialized successfully.")
-        except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"❌ Backend init failed: {e.stderr or e}")
+        # init
+        CommandExecutor.run_command(
+            ["tofu", "init", "-reconfigure"],
+            cluster_dir,
+            "initializing backend",
+            env=env_vars,
+        )
 
-        # List all workspaces
-        try:
-            result = CommandExecutor.run_command(
-                ["tofu", "workspace", "list"],
-                cluster_dir, "listing workspaces", env=env_vars
-            )
-            workspaces = [line.strip("* ").strip() 
-                          for line in result.splitlines() 
-                          if line.strip()]
-            logger.debug(f"📋 Found workspaces for cluster '{cluster_name}': {workspaces}")
-        except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"❌ Failed to list workspaces: {e.stderr or e}")
+        # get workspaces
+        result = CommandExecutor.run_command(
+            ["tofu", "workspace", "list"],
+            cluster_dir,
+            "listing workspaces",
+            env=env_vars,
+        )
 
-        # Destroy all non-default workspaces
+        workspaces = [
+            line.strip("* ").strip() for line in result.splitlines() if line.strip()
+        ]
+
+        logger.debug(f"Found workspaces: {workspaces}")
+
+        # ---------- STEP 1: collect role metadata ----------
+        ws_roles = []
+
         for ws in workspaces:
             if ws.lower() == "default":
                 continue
 
-            logger.debug(f" Destroying workspace: {ws}")
+            CommandExecutor.run_command(
+                ["tofu", "workspace", "select", ws],
+                cluster_dir,
+                f"select {ws}",
+                env=env_vars,
+            )
+
+            out = subprocess.run(
+                ["tofu", "output", "-json"],
+                cwd=cluster_dir,
+                capture_output=True,
+                text=True,
+                env=env_vars,
+                check=True,
+            )
+
+            outputs = json.loads(out.stdout or "{}")
+
+            role = outputs.get("k3s_role", {}).get("value")
+
+            # fallback if missing, infer from outputs when possible
+            if not role:
+                worker_ip = outputs.get("worker_ip", {}).get("value")
+                ha_ip = outputs.get("ha_ip", {}).get("value")
+                if worker_ip:
+                    role = "worker"
+                elif ha_ip:
+                    role = "ha"
+                elif "worker" in ws:
+                    role = "worker"
+                elif "ha" in ws:
+                    role = "ha"
+                else:
+                    role = "master"
+
+            ws_roles.append((ws, role))
+
+        # ---------- STEP 2: enforce correct destroy order ----------
+        priority = {"worker": 0, "ha": 1, "master": 2}
+
+        ws_roles.sort(key=lambda x: priority.get(x[1], 99))
+
+        logger.info(f"Destroy order: {ws_roles}")
+
+        # ---------- STEP 3: destroy ----------
+        for ws, role in ws_roles:
             try:
+                logger.info(f"Destroying {ws} ({role})")
 
                 CommandExecutor.run_command(
                     ["tofu", "workspace", "select", ws],
                     cluster_dir,
-                    f"select workspace for node {ws}",
+                    f"select {ws}",
                     env=env_vars,
                 )
 
                 CommandExecutor.run_command(
                     ["tofu", "destroy", "-auto-approve"],
                     cluster_dir,
-                    f"OpenTofu destroy for {ws}",
+                    f"destroy {ws}",
                     env=env_vars,
                 )
 
-                logger.info(f"✅ Successfully destroyed node '{ws}'")
+                CommandExecutor.run_command(
+                    ["tofu", "workspace", "select", "default"],
+                    cluster_dir,
+                    "back to default",
+                    env=env_vars,
+                )
 
-                CommandExecutor.run_command(["tofu", "workspace", "select", "default"],
-                            cluster_dir, "switching back to default", env=env_vars)
-                CommandExecutor.run_command(["tofu", "workspace", "delete", "-force", ws],
-                            cluster_dir, f"deleting workspace {ws}", env=env_vars)
+                CommandExecutor.run_command(
+                    ["tofu", "workspace", "delete", "-force", ws],
+                    cluster_dir,
+                    f"delete {ws}",
+                    env=env_vars,
+                )
+
+                logger.info(f"✔ Destroyed {ws}")
+
             except RuntimeError as e:
-                logger.warning(f"⚠️ Failed to destroy workspace '{ws}': {e.stderr or e}")
+                logger.warning(f"⚠ Failed destroying {ws}: {str(e)}")
 
-        # Drop schema from db and Cleanup local directory
+        # cleanup DB + folder
         self.remove_cluster_schema_from_db(cluster_name)
         shutil.rmtree(cluster_dir, ignore_errors=True)
-        logger.info(f"🧹 Removed local cluster directory '{cluster_dir}'")
 
-        logger.info(f"----------- Destruction of cluster '{cluster_name}' complete -----------")
+        logger.info(
+            f"----------- Destruction complete for '{cluster_name}' -----------"
+        )
 
     def remove_cluster_schema_from_db(self, cluster_name: str) -> None:
-            """
-            Removes the schema and the entry for the cluster from the PostgreSQL database.
+        """
+        Removes the schema and the entry for the cluster from the PostgreSQL database.
 
-            Args:
-                cluster_name: The name of the cluster to remove from the database
+        Args:
+            cluster_name: The name of the cluster to remove from the database
 
-            Raises:
-                RuntimeError: If the database operation fails
-            """
-            logger.debug(f"Removing schema for cluster '{cluster_name}' from the PostgreSQL database...")
+        Raises:
+            RuntimeError: If the database operation fails
+        """
+        logger.debug(
+            f"Removing schema for cluster '{cluster_name}' from the PostgreSQL database..."
+        )
 
-            # Create a PostgreSQL connection string using the config
-            connection_string = self.pg_config.get_connection_string()
+        # Create a PostgreSQL connection string using the config
+        connection_string = self.pg_config.get_connection_string()
 
-            try:
-                # Connect to the PostgreSQL database
-                connection = psycopg2.connect(connection_string)
-                cursor = connection.cursor()
+        connection = None
+        cursor = None
+        try:
+            # Connect to the PostgreSQL database
+            connection = psycopg2.connect(connection_string)
+            cursor = connection.cursor()
 
-                # Define the SQL query to delete the cluster schema
-                drop_schema_query = f'DROP SCHEMA IF EXISTS "{cluster_name}" CASCADE'
-                cursor.execute(drop_schema_query)
+            # Define the SQL query to delete the cluster schema
+            drop_schema_query = f'DROP SCHEMA IF EXISTS "{cluster_name}" CASCADE'
+            cursor.execute(drop_schema_query)
 
-                # Commit the transaction
-                connection.commit()
+            # Commit the transaction
+            connection.commit()
 
-                logger.info(f"🧹 Dropped schema for cluster '{cluster_name}' from the database")
+            logger.info(
+                f"🧹 Dropped schema for cluster '{cluster_name}' from the database"
+            )
 
-            except psycopg2.Error as e:
-                logger.error(f"❌ Failed to remove schema for cluster '{cluster_name}' from the database: {e}")
-                raise RuntimeError(f" ❌Failed to remove schema for cluster '{cluster_name}' from the database")
+        except psycopg2.Error as e:
+            logger.error(
+                f"❌ Failed to remove schema for cluster '{cluster_name}' from the database: {e}"
+            )
+            raise RuntimeError(
+                f" ❌Failed to remove schema for cluster '{cluster_name}' from the database"
+            )
 
-            finally:
-                # Close the database connection
-                if cursor:
-                    cursor.close()
-                if connection:
-                    connection.close()
+        finally:
+            # Close the database connection
+            if cursor is not None:
+                cursor.close()
+            if connection is not None:
+                connection.close()
 
     def deploy_manifests(
         self,
@@ -738,7 +881,9 @@ class Swarmchestrate:
 
         try:
             # Copy copy_manifest.tf from templates
-            tf_source_file = Path(self.template_manager.templates_dir) / "deploy_manifest.tf"
+            tf_source_file = (
+                Path(self.template_manager.templates_dir) / "deploy_manifest.tf"
+            )
             if not tf_source_file.exists():
                 logger.debug(f"deploy_manifest.tf not found at: {tf_source_file}")
                 raise RuntimeError(f"deploy_manifest.tf not found at: {tf_source_file}")
@@ -750,7 +895,9 @@ class Swarmchestrate:
             env_vars["TF_LOG"] = os.getenv("TF_LOG", "INFO")
             env_vars["TF_LOG_PATH"] = os.getenv("TF_LOG_PATH", "/tmp/opentofu.log")
 
-            logger.info(f"------------ Applying manifest on node: {master_ip} -------------------")
+            logger.info(
+                f"------------ Applying manifest on node: {master_ip} -------------------"
+            )
 
             # Run tofu init with spinner
             CommandExecutor.run_command(
@@ -769,14 +916,16 @@ class Swarmchestrate:
                     f"-var=manifest_folder={manifest_folder}",
                     f"-var=master_ip={master_ip}",
                     f"-var=ssh_private_key_path={ssh_key_path}",
-                    f"-var=ssh_user={ssh_user}"
+                    f"-var=ssh_user={ssh_user}",
                 ],
                 cwd=str(copy_dir),
                 description="OpenTofu apply",
                 env=env_vars,
             )
 
-            logger.info("------------ Successfully applied manifests -------------------")
+            logger.info(
+                "------------ Successfully applied manifests -------------------"
+            )
 
         except RuntimeError as e:
             print(f"\n---------- ERROR ----------\n{e}\n")
@@ -829,7 +978,9 @@ class Swarmchestrate:
 
         try:
             # Copy template tf file into temp dir
-            tf_source_file = Path(self.template_manager.templates_dir) / "registry_secret.tf"
+            tf_source_file = (
+                Path(self.template_manager.templates_dir) / "registry_secret.tf"
+            )
             if not tf_source_file.exists():
                 logger.debug(f"registry_secret.tf not found at: {tf_source_file}")
                 raise RuntimeError(f"registry_secret.tf not found at: {tf_source_file}")
@@ -858,7 +1009,7 @@ class Swarmchestrate:
                 f"-var=master_ip={master_ip}",
                 f"-var=ssh_user={ssh_user}",
                 f"-var=ssh_private_key_path={ssh_key_path}",
-                f"-var=namespace={namespace}"
+                f"-var=namespace={namespace}",
             ]
             if secret_names:
                 apply_vars.append(f"-var=secret_names={json.dumps(secret_names)}")

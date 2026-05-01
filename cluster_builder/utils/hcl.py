@@ -6,6 +6,16 @@ import logging
 import re
 
 logger = logging.getLogger("cluster_builder")
+
+
+def sanitize_module_name(module_name: str) -> str:
+    """Convert a module name into a valid Terraform identifier."""
+    sanitized = re.sub(r"[^A-Za-z0-9_]", "_", module_name)
+    if re.match(r"^[0-9]", sanitized):
+        sanitized = f"_{sanitized}"
+    return sanitized
+
+
 def add_backend_config(backend_tf_path, conn_str, schema_name):
     """
     Adds a PostgreSQL backend configuration to a Terraform file.
@@ -17,7 +27,9 @@ def add_backend_config(backend_tf_path, conn_str, schema_name):
     if os.path.exists(backend_tf_path):
         with open(backend_tf_path) as f:
             if 'backend "pg"' in f.read():
-                logger.debug("⚠️ Backend config already exists, skipping: %s", backend_tf_path)
+                logger.debug(
+                    "⚠️ Backend config already exists, skipping: %s", backend_tf_path
+                )
                 return
 
     # Build the backend configuration block
@@ -51,7 +63,11 @@ def add_module_block(main_tf_path, module_name, config):
     if os.path.exists(main_tf_path):
         with open(main_tf_path) as f:
             if f'module "{module_name}"' in f.read():
-                logger.warning("⚠️ Module '%s' already exists, skipping in %s", module_name, main_tf_path)
+                logger.warning(
+                    "⚠️ Module '%s' already exists, skipping in %s",
+                    module_name,
+                    main_tf_path,
+                )
                 return
 
     # Build the module block
@@ -83,8 +99,12 @@ def is_target_module_block(tree: Tree, module_name: str) -> bool:
     """
     Check if the tree is a module block with the specified name.
     """
-    logger.debug(f"Checking tree with data: {tree.data}, children count: {len(tree.children)}")
-    logger.debug(f"Children types and values: {[ (type(c), getattr(c, 'value', None)) for c in tree.children ]}")
+    logger.debug(
+        f"Checking tree with data: {tree.data}, children count: {len(tree.children)}"
+    )
+    logger.debug(
+        f"Children types and values: {[(type(c), getattr(c, 'value', None)) for c in tree.children]}"
+    )
 
     if tree.data != "block":
         logger.debug(f"Rejected: tree.data is '{tree.data}', expected 'block'")
@@ -98,7 +118,9 @@ def is_target_module_block(tree: Tree, module_name: str) -> bool:
     # First child should be an identifier tree
     first_child = tree.children[0]
     if not isinstance(first_child, Tree) or first_child.data != "identifier":
-        logger.debug(f"Rejected: first child is not an identifier Tree (found {type(first_child)} with data '{getattr(first_child, 'data', None)}')")
+        logger.debug(
+            f"Rejected: first child is not an identifier Tree (found {type(first_child)} with data '{getattr(first_child, 'data', None)}')"
+        )
         return False
 
     # First child should have a NAME token with 'module'
@@ -108,18 +130,23 @@ def is_target_module_block(tree: Tree, module_name: str) -> bool:
 
     first_value = first_child.children[0].value
     if first_value != "module":
-        logger.debug(f"Rejected: first child token value '{first_value}' is not 'module'")
+        logger.debug(
+            f"Rejected: first child token value '{first_value}' is not 'module'"
+        )
         return False
 
     # Second child: could be a Token or Tree with Token child for module name
     second_child = tree.children[1]
 
     if not isinstance(second_child, Token) or second_child.value != f'"{module_name}"':
-        logger.debug(f"Second child check failed: type={type(second_child)}, value={getattr(second_child, 'value', None)} expected=\"{module_name}\"")
+        logger.debug(
+            f'Second child check failed: type={type(second_child)}, value={getattr(second_child, "value", None)} expected="{module_name}"'
+        )
         return False
 
     logger.debug(f"Module block matched for module name '{module_name}'")
     return True
+
 
 def simple_remove_module(tree, module_name, removed=False):
     """
@@ -152,7 +179,9 @@ def simple_remove_module(tree, module_name, removed=False):
                     and is_target_module_block(child, module_name)
                 ):
                     removed = True
-                    print(f"Module {module_name} found and removed.")  # Debug log
+                    logger.debug(
+                        f"Module {module_name} found and removed."
+                    )  # Debug log
 
                     # Check if the next node is a new_line_or_comment, and skip it as well
                     if i + 1 < len(body_node.children):
@@ -197,7 +226,7 @@ def remove_module_block(main_tf_path, module_name: str):
     if not removed:
         logger.warning("⚠️ No module named '%s' found in %s", module_name, main_tf_path)
         return
-    
+
     # Debug: Log the final tree structure after removal
     logger.debug("Final Tree after module removal: %s", new_tree)
 
@@ -211,7 +240,9 @@ def remove_module_block(main_tf_path, module_name: str):
 
         logger.debug("🗑️ Removed module '%s' from %s", module_name, main_tf_path)
     except Exception as e:
-        logger.error("❌ Failed to reconstruct HCL in %s: %s", main_tf_path, e, exc_info=True)
+        logger.error(
+            "❌ Failed to reconstruct HCL in %s: %s", main_tf_path, e, exc_info=True
+        )
         # Print more detailed error information
         import traceback
 
@@ -255,9 +286,10 @@ def extract_template_variables(template_path):
         logger.error(f"❌ {error_msg}")
         raise ValueError(error_msg)
 
+
 def add_output_blocks(outputs_tf_path, module_name, output_names):
     existing_text = ""
-    
+
     # Read existing content if the file exists
     if os.path.exists(outputs_tf_path):
         with open(outputs_tf_path, "r") as f:
@@ -272,8 +304,10 @@ def add_output_blocks(outputs_tf_path, module_name, output_names):
 
         if f'output "{output_name}"' in existing_text:
             # Check if the output block already exists in the file
-            logger.debug(f"⚠️ Output '{output_name}' already exists in {outputs_tf_path}. Checking if it needs an update.")
-            
+            logger.debug(
+                f"⚠️ Output '{output_name}' already exists in {outputs_tf_path}. Checking if it needs an update."
+            )
+
             # Only update if the value is None in the current output
             if output_name in ["worker_ip", "ha_ip"] and "None" in existing_text:
                 updated_lines.append(output_block)
@@ -281,7 +315,9 @@ def add_output_blocks(outputs_tf_path, module_name, output_names):
                 # If it's there but not the same, we need to update it
                 updated_lines.append(output_block)
             else:
-                logger.debug(f"Output '{output_name}' is already correctly defined in {outputs_tf_path}.")
+                logger.debug(
+                    f"Output '{output_name}' is already correctly defined in {outputs_tf_path}."
+                )
             continue
         else:
             # If the output doesn't exist, add it
@@ -292,7 +328,7 @@ def add_output_blocks(outputs_tf_path, module_name, output_names):
         # Remove old output definitions for those outputs that will be replaced
         for output_name in output_names:
             existing_text = re.sub(
-                f'output "{output_name}".*?}}', '', existing_text, flags=re.DOTALL
+                f'output "{output_name}".*?}}', "", existing_text, flags=re.DOTALL
             )
 
         # Combine all new output blocks and updates to add

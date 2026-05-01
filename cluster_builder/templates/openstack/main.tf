@@ -244,6 +244,10 @@ output "ha_ip" {
   value = var.k3s_role == "ha" ? openstack_networking_floatingip_associate_v2.fip_association.floating_ip : null
 }
 
+output "k3s_role" {
+  value = [for t in openstack_compute_instance_v2.k3s_node.tags : split("=", t)[1] if startswith(t, "Role=")][0]
+}
+
 output "k3s_token" {
   value = [for t in openstack_compute_instance_v2.k3s_node.tags : split("=", t)[1] if startswith(t, "k3sToken=")][0]
 }

@@ -55,12 +55,18 @@ class CommandExecutor:
             try:
                 process.wait(timeout=5)
                 stdout, stderr = process.communicate()
-                return CommandExecutor._check_result(stdout, stderr, process.returncode, description)
+                return CommandExecutor._check_result(
+                    stdout, stderr, process.returncode, description
+                )
             except subprocess.TimeoutExpired:
                 pass  # Still running → spinner starts
 
         # Either timeout <= 5s, or process still running after 5s
-        spinner = yaspin(Spinners.point, text=f"Running {description}...", color="cyan") if show_spinner else None
+        spinner = (
+            yaspin(Spinners.point, text=f"Running {description}...", color="cyan")
+            if show_spinner
+            else None
+        )
         if spinner:
             spinner.start()
 
@@ -71,12 +77,16 @@ class CommandExecutor:
             stdout, stderr = process.communicate()
             if spinner:
                 spinner.fail("⏰")
-            raise RuntimeError(f"{description.capitalize()} timed out after {timeout} seconds")
+            raise RuntimeError(
+                f"{description.capitalize()} timed out after {timeout} seconds"
+            )
 
         if spinner:
             spinner.ok("✅") if process.returncode == 0 else spinner.fail("💥")
 
-        return CommandExecutor._check_result(stdout, stderr, process.returncode, description)
+        return CommandExecutor._check_result(
+            stdout, stderr, process.returncode, description
+        )
 
     @staticmethod
     def _check_result(stdout, stderr, returncode, description):
