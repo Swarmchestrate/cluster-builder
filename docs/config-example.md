@@ -88,6 +88,7 @@ config = {
     "cloud": "edge",
     "edge_device_ip": "10.0.0.1",
     "ssh_user": "your_user",
+    "ssh_port": 22,  # optional, defaults to 22
     "ssh_auth_method": "key",  # "password" or "key"
     "ssh_key": "/path/to/key.pem",  # required if ssh_auth_method == "key"
     # "ssh_password": "your_password",  # required if ssh_auth_method == "password"

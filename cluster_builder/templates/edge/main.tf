@@ -19,6 +19,9 @@ variable "cloud" {
 variable "ssh_user" {}
 variable "ssh_key" {}
 variable "ssh_auth_method" {}
+variable "ssh_port" {
+  default = 22
+}
 
 variable "k3s_token" {}
 
@@ -51,6 +54,7 @@ resource "k3s_server" "k3s" {
     host        = var.edge_device_ip
     user        = var.ssh_user
     private_key = file(var.ssh_key)
+    port        = var.ssh_port
   }
 
   config = <<-EOT
@@ -69,6 +73,7 @@ resource "k3s_server" "k3s_ha_init" {
     host        = var.edge_device_ip
     user        = var.ssh_user
     private_key = file(var.ssh_key)
+    port        = var.ssh_port
   }
 
   config = <<-EOT
@@ -90,6 +95,7 @@ resource "k3s_server" "k3s_ha_join" {
     host        = var.edge_device_ip
     user        = var.ssh_user
     private_key = file(var.ssh_key)
+    port        = var.ssh_port
   }
 
   config = <<-EOT
@@ -112,6 +118,7 @@ resource "k3s_agent" "k3s" {
     host        = var.edge_device_ip
     user        = var.ssh_user
     private_key = file(var.ssh_key)
+    port        = var.ssh_port
   }
 
   server = "https://${var.master_ip}:6443"
