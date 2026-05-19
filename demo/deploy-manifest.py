@@ -17,4 +17,5 @@ Swarmchestrate(template_dir="templates", output_dir="output").deploy_manifests(
     master_ip=cfg["master_ip"],
     ssh_key_path=cfg["ssh_key_path"],
     ssh_user=cfg["ssh_user"],
+    ssh_port=cfg.get("ssh_port", 22),
 )

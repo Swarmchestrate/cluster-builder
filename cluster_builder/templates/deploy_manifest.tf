@@ -4,6 +4,11 @@ variable "manifest_folder" {}
 variable "ssh_private_key_path" {}
 variable "master_ip" {}
 variable "ssh_user" {}
+variable "ssh_port" {
+  default     = 22
+  description = "SSH port for the master node. Use non-22 for DDNS/NAT setups (e.g. 10000)."
+}
+
 
 resource "null_resource" "copy_manifests" {
   connection {
@@ -11,6 +16,7 @@ resource "null_resource" "copy_manifests" {
     user        = var.ssh_user
     private_key = file(var.ssh_private_key_path)
     host        = var.master_ip
+    port        = var.ssh_port
   }
 
   # Copy manifest folder to a temporary location first
