@@ -18,6 +18,9 @@ variable "secret_names" {
 variable "master_ip" {}
 variable "ssh_user" {}
 variable "ssh_private_key_path" {}
+variable "ssh_port" {
+  default = 22
+}
 variable "namespace" {
   default = "default"
 }
@@ -30,6 +33,7 @@ resource "null_resource" "docker_registry_secrets" {
     host        = var.master_ip
     user        = var.ssh_user
     private_key = file(var.ssh_private_key_path)
+    port        = var.ssh_port
   }
 
   provisioner "remote-exec" {

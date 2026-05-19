@@ -11,6 +11,7 @@ registry_config = {
     "master_ip": "34.201.107.206",
     "ssh_user": "ec2-user",
     "ssh_private_key_path": "/workspaces/cluster-builder/output/g.pem",
+    "ssh_port": 22,
     "secret_names": ["test"],
 }
 

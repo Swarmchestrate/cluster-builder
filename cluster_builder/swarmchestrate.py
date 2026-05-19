@@ -863,6 +863,7 @@ class Swarmchestrate:
         master_ip: str,
         ssh_key_path: str,
         ssh_user: str,
+        ssh_port: int = 22,
     ):
         """
         Copy and apply manifests to a cluster using copy_manifest.tf in a temporaryfolder.
@@ -872,6 +873,7 @@ class Swarmchestrate:
             master_ip: IP address of K3s master
             ssh_key_path: Path to SSH private key
             ssh_user: SSH username to connect to the master node
+            ssh_port: SSH port for the master node (defaults to 22)
         """
         # Dedicated folder for copy-manifest operations
         copy_dir = Path(self.output_dir) / "copy-manifest"
@@ -917,6 +919,7 @@ class Swarmchestrate:
                     f"-var=master_ip={master_ip}",
                     f"-var=ssh_private_key_path={ssh_key_path}",
                     f"-var=ssh_user={ssh_user}",
+                    f"-var=ssh_port={ssh_port}",
                 ],
                 cwd=str(copy_dir),
                 description="OpenTofu apply",
@@ -944,6 +947,7 @@ class Swarmchestrate:
                 "master_ip": "1.2.3.4",
                 "ssh_user": "ubuntu",
                 "ssh_private_key_path": "/path/to/key.pem",
+                "ssh_port": 22,
                 "namespace": "optional-namespace",
                 "secret_names": ["optional-name1", "optional-name2"]
             }
@@ -962,6 +966,7 @@ class Swarmchestrate:
         master_ip = cluster_config.get("master_ip")
         ssh_user = cluster_config.get("ssh_user")
         ssh_key_path = cluster_config.get("ssh_private_key_path")
+        ssh_port = cluster_config.get("ssh_port", 22)
         namespace = cluster_config.get("namespace", "default")
         secret_names = cluster_config.get("secret_names", [])
 
@@ -1009,6 +1014,7 @@ class Swarmchestrate:
                 f"-var=master_ip={master_ip}",
                 f"-var=ssh_user={ssh_user}",
                 f"-var=ssh_private_key_path={ssh_key_path}",
+                f"-var=ssh_port={ssh_port}",
                 f"-var=namespace={namespace}",
             ]
             if secret_names:
