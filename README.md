@@ -162,8 +162,10 @@ The deploy_manifests method copies Kubernetes manifests to the target cluster no
 orchestrator.deploy_manifests(
     manifest_folder="path/to/manifests",
     master_ip="MASTER_NODE_IP",
-    ssh_key_path="path/to/key.pem",
-    ssh_user="USERNAME"
+    ssh_user="USERNAME",
+    ssh_key="path/to/key.pem",        # for key auth
+    ssh_auth_method="key",            # or "password"
+    ssh_password=""                   # required when ssh_auth_method="password"
 )
 ```
 ---
