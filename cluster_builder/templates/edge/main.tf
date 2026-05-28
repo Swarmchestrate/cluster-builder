@@ -2,7 +2,7 @@ terraform {
   required_providers {
     k3s = {
       source = "striveworks/k3s"
-      version = "0.3.0"
+      version = "1.0.0"
     }
   }
 }
@@ -53,14 +53,15 @@ resource "k3s_server" "k3s" {
   auth = {
     host        = var.edge_device_ip
     user        = var.ssh_user
-    private_key = file(var.ssh_key)
+    private_key_file = var.ssh_key
     port        = var.ssh_port
   }
+
+  bootstrap_token = var.k3s_token
 
   config = <<-EOT
     node-name: ${var.resource_name}
     node-label: labels.swarmchestrate.eu/ms_id=${var.resource_name}
-    token: ${var.k3s_token}
     cluster-name: ${var.cluster_name}
   EOT
 }
@@ -73,14 +74,15 @@ resource "k3s_server" "k3s_ha_init" {
   auth = {
     host        = var.edge_device_ip
     user        = var.ssh_user
-    private_key = file(var.ssh_key)
+    private_key_file = var.ssh_key
     port        = var.ssh_port
   }
+
+  bootstrap_token = var.k3s_token
 
   config = <<-EOT
     node-name: ${var.resource_name}
     node-label: labels.swarmchestrate.eu/ms_id=${var.resource_name}
-    token: ${var.k3s_token}
     cluster-name: ${var.cluster_name}
   EOT
 
@@ -96,14 +98,13 @@ resource "k3s_server" "k3s_ha_join" {
   auth = {
     host        = var.edge_device_ip
     user        = var.ssh_user
-    private_key = file(var.ssh_key)
+    private_key_file = var.ssh_key
     port        = var.ssh_port
   }
 
   config = <<-EOT
     node-name: ${var.resource_name}
     node-label: labels.swarmchestrate.eu/ms_id=${var.resource_name}
-    token: ${var.k3s_token}
   EOT
 
   highly_available = {
@@ -120,20 +121,18 @@ resource "k3s_agent" "k3s" {
   auth = {
     host        = var.edge_device_ip
     user        = var.ssh_user
-    private_key = file(var.ssh_key)
+    private_key_file = var.ssh_key
     port        = var.ssh_port
   }
 
   server = "https://${var.master_ip}:6443"
   token  = var.k3s_token
 
-  kubeconfig = "/etc/rancher/k3s/k3s.yaml"
-
   config = <<-EOT
     node-name: ${var.resource_name}
     node-label: labels.swarmchestrate.eu/ms_id=${var.resource_name}
   EOT
-  allow_delete_err = true
+  
 }
 
 output "cluster_name" {
