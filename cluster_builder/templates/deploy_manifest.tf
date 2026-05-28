@@ -1,7 +1,16 @@
 # main.tf
 
 variable "manifest_folder" {}
-variable "ssh_private_key_path" {}
+variable "ssh_key" {
+  default = ""
+}
+variable "ssh_password" {
+  default   = ""
+  sensitive = true
+}
+variable "ssh_auth_method" {
+  default = "key"
+}
 variable "master_ip" {}
 variable "ssh_user" {}
 variable "ssh_port" {
@@ -14,7 +23,8 @@ resource "null_resource" "copy_manifests" {
   connection {
     type        = "ssh"
     user        = var.ssh_user
-    private_key = file(var.ssh_private_key_path)
+    private_key = var.ssh_auth_method == "key" ? file(var.ssh_key) : null
+    password    = var.ssh_auth_method == "password" ? var.ssh_password : null
     host        = var.master_ip
     port        = var.ssh_port
   }
