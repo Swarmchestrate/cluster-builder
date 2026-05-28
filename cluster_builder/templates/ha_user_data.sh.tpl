@@ -22,6 +22,7 @@ if ! curl -sfL https://get.k3s.io | K3S_TOKEN="${k3s_token}" sh -s - server \
     --server "https://${master_ip}:6443" \
     --node-external-ip="${public_ip}" \
     --node-name="${resource_name}" \
+    --node-label="labels.swarmchestrate.eu/ms_id=${resource_name}" \
     --flannel-backend=wireguard-native \
     --flannel-external-ip; then
     log_message "ERROR: K3s server installation failed!"
