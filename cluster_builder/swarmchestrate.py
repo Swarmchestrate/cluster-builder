@@ -890,7 +890,9 @@ class Swarmchestrate:
             raise ValueError("ssh_key is required when ssh_auth_method is 'key'")
 
         if ssh_auth_method == "password" and not ssh_password:
-            raise ValueError("ssh_password is required when ssh_auth_method is 'password'")
+            raise ValueError(
+                "ssh_password is required when ssh_auth_method is 'password'"
+            )
 
         # Dedicated folder for copy-manifest operations
         copy_dir = Path(self.output_dir) / "copy-manifest"
@@ -1003,7 +1005,9 @@ class Swarmchestrate:
         secret_names = cluster_config.get("secret_names", [])
 
         if not all([master_ip, ssh_user]):
-            raise ValueError("Cluster config missing required keys: master_ip, ssh_user")
+            raise ValueError(
+                "Cluster config missing required keys: master_ip, ssh_user"
+            )
 
         if ssh_auth_method not in {"key", "password"}:
             raise ValueError("ssh_auth_method must be either 'key' or 'password'")
