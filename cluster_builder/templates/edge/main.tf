@@ -59,6 +59,7 @@ resource "k3s_server" "k3s" {
 
   config = <<-EOT
     node-name: ${var.resource_name}
+    node-label: labels.swarmchestrate.eu/ms_id=${var.resource_name}
     token: ${var.k3s_token}
     cluster-name: ${var.cluster_name}
   EOT
@@ -78,6 +79,7 @@ resource "k3s_server" "k3s_ha_init" {
 
   config = <<-EOT
     node-name: ${var.resource_name}
+    node-label: labels.swarmchestrate.eu/ms_id=${var.resource_name}
     token: ${var.k3s_token}
     cluster-name: ${var.cluster_name}
   EOT
@@ -100,6 +102,7 @@ resource "k3s_server" "k3s_ha_join" {
 
   config = <<-EOT
     node-name: ${var.resource_name}
+    node-label: labels.swarmchestrate.eu/ms_id=${var.resource_name}
     token: ${var.k3s_token}
   EOT
 
@@ -128,6 +131,7 @@ resource "k3s_agent" "k3s" {
 
   config = <<-EOT
     node-name: ${var.resource_name}
+    node-label: labels.swarmchestrate.eu/ms_id=${var.resource_name}
   EOT
   allow_delete_err = true
 }
