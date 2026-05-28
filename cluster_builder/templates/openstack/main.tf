@@ -53,11 +53,6 @@ resource "openstack_blockstorage_volume_v3" "root_volume" {
   image_id    = var.openstack_image_id
 }
 
-# Defining the port to use while instance creation
-resource "openstack_networking_port_v2" "port_1" {
-  network_id = var.network_id
-}
-
 # Security group rules
 locals {
   ingress_rules = var.security_group_id == "" ? concat(
@@ -144,22 +139,15 @@ resource "openstack_networking_secgroup_rule_v2" "k3s_sg_egress" {
   description       = each.value.desc
 }
 
-resource "openstack_networking_port_secgroup_associate_v2" "port_2" {
-  port_id = openstack_networking_port_v2.port_1.id
-  enforce = true
-  # Use the provided security group ID if available, otherwise use the generated security group
-  security_group_ids = var.security_group_id != "" ? [var.security_group_id] : [openstack_networking_secgroup_v2.k3s_sg[0].id]
-}
-
 # Compute instance for each role
 resource "openstack_compute_instance_v2" "k3s_node" {
-  depends_on = [openstack_networking_port_v2.port_1] 
-
   name             = "${var.resource_name}"
   flavor_name      = var.openstack_flavor_id
   key_pair         = replace(basename(var.ssh_key), ".pem", "")
  # Only add the image_id if block device is NOT used
   image_id = var.use_block_device ? null : var.openstack_image_id
+
+  security_groups = var.security_group_id != "" ? [var.security_group_id] : [openstack_networking_secgroup_v2.k3s_sg[0].name]
 
   # Conditional block_device for boot volume
   dynamic "block_device" {
@@ -174,7 +162,7 @@ resource "openstack_compute_instance_v2" "k3s_node" {
   }
 
   network {
-    port = openstack_networking_port_v2.port_1.id
+    uuid = var.network_id
   }
 
   tags = [
@@ -185,13 +173,14 @@ resource "openstack_compute_instance_v2" "k3s_node" {
   ]
 }
 
+data "openstack_networking_port_v2" "instance_port" {
+  device_id  = openstack_compute_instance_v2.k3s_node.id
+  network_id = var.network_id
+}
+
 resource "openstack_networking_floatingip_associate_v2" "fip_association" {
   floating_ip = var.floating_ip 
-  port_id     = openstack_networking_port_v2.port_1.id
-
-  depends_on = [
-    openstack_compute_instance_v2.k3s_node  # Ensure the instance is created first
-  ]
+  port_id     = data.openstack_networking_port_v2.instance_port.id
 }
 
 # Provisioning via SSH
