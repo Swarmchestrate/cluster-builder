@@ -236,7 +236,6 @@ config = {
 Templates should be organised as follows:
 - `templates/` - Base directory for templates
 - `templates/{cloud}/` - Terraform modules for each cloud provider
-- `templates/{role}_user_data.sh.tpl` - Node initialisation scripts
 - `templates/{cloud}_provider.tf` - Provider configuration templates
 
 ---
