@@ -235,7 +235,7 @@ config = {
 
 Templates should be organised as follows:
 - `templates/` - Base directory for templates
-- `templates/{cloud}/` - Terraform modules for each cloud provider
+- `templates/{cloud}/` - Opentofu modules for each cloud provider
 - `templates/{cloud}_provider.tf` - Provider configuration templates
 
 ---
