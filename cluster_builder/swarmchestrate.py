@@ -5,6 +5,7 @@ Swarmchestrate - Main orchestration class for K3s cluster management.
 import json
 import os
 import logging
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -710,6 +711,42 @@ class Swarmchestrate:
 
         logger.debug(f"Found workspaces: {workspaces}")
 
+        # Parse module metadata once to infer role when workspace outputs are missing.
+        main_tf_path = os.path.join(cluster_dir, "main.tf")
+        module_role = {}
+        try:
+            with open(main_tf_path, "r") as f:
+                lines = f.readlines()
+
+            current_module = None
+            current_role = None
+            brace_depth = 0
+
+            for line in lines:
+                if current_module is None:
+                    module_match = re.match(r'\s*module\s+"([^"]+)"\s*\{', line)
+                    if module_match:
+                        current_module = module_match.group(1)
+                        current_role = None
+                        brace_depth = line.count("{") - line.count("}")
+                    continue
+
+                brace_depth += line.count("{") - line.count("}")
+
+                role_match = re.match(r'\s*k3s_role\s*=\s*"([^"]+)"', line)
+                if role_match:
+                    current_role = role_match.group(1).lower()
+
+                if brace_depth <= 0:
+                    if current_module:
+                        if current_role:
+                            module_role[current_module] = current_role
+                    current_module = None
+                    current_role = None
+                    brace_depth = 0
+        except Exception as e:
+            logger.debug(f"Could not parse module role metadata from main.tf: {e}")
+
         # ---------- STEP 1: collect role metadata ----------
         ws_roles = []
 
@@ -739,15 +776,15 @@ class Swarmchestrate:
 
             # fallback if missing, infer from outputs when possible
             if not role:
+                role = module_role.get(ws)
+
+            # fallback if still missing, infer from per-role output fields
+            if not role:
                 worker_ip = outputs.get("worker_ip", {}).get("value")
                 ha_ip = outputs.get("ha_ip", {}).get("value")
                 if worker_ip:
                     role = "worker"
                 elif ha_ip:
-                    role = "ha"
-                elif "worker" in ws:
-                    role = "worker"
-                elif "ha" in ws:
                     role = "ha"
                 else:
                     role = "master"
@@ -861,9 +898,12 @@ class Swarmchestrate:
         self,
         manifest_folder: str,
         master_ip: str,
-        ssh_key_path: str,
         ssh_user: str,
+        ssh_key: str = "",
+        ssh_key_path: str = "",
         ssh_port: int = 22,
+        ssh_auth_method: str = "key",
+        ssh_password: str = "",
     ):
         """
         Copy and apply manifests to a cluster using copy_manifest.tf in a temporaryfolder.
@@ -871,10 +911,26 @@ class Swarmchestrate:
         Args:
             manifest_folder: Path to local manifest folder
             master_ip: IP address of K3s master
-            ssh_key_path: Path to SSH private key
+            ssh_key: Path to SSH private key (preferred)
+            ssh_key_path: Deprecated alias for ssh_key
             ssh_user: SSH username to connect to the master node
             ssh_port: SSH port for the master node (defaults to 22)
+            ssh_auth_method: SSH auth method, either "key" or "password"
+            ssh_password: SSH password when ssh_auth_method is "password"
         """
+        resolved_ssh_key = ssh_key or ssh_key_path
+
+        if ssh_auth_method not in {"key", "password"}:
+            raise ValueError("ssh_auth_method must be either 'key' or 'password'")
+
+        if ssh_auth_method == "key" and not resolved_ssh_key:
+            raise ValueError("ssh_key is required when ssh_auth_method is 'key'")
+
+        if ssh_auth_method == "password" and not ssh_password:
+            raise ValueError(
+                "ssh_password is required when ssh_auth_method is 'password'"
+            )
+
         # Dedicated folder for copy-manifest operations
         copy_dir = Path(self.output_dir) / "copy-manifest"
         copy_dir.mkdir(parents=True, exist_ok=True)
@@ -910,17 +966,21 @@ class Swarmchestrate:
             )
 
             # Run tofu apply with spinner
+            apply_vars = [
+                f"-var=manifest_folder={manifest_folder}",
+                f"-var=master_ip={master_ip}",
+                f"-var=ssh_user={ssh_user}",
+                f"-var=ssh_port={ssh_port}",
+                f"-var=ssh_auth_method={ssh_auth_method}",
+            ]
+
+            if ssh_auth_method == "key":
+                apply_vars.append(f"-var=ssh_key={resolved_ssh_key}")
+            else:
+                apply_vars.append(f"-var=ssh_password={json.dumps(ssh_password)}")
+
             CommandExecutor.run_command(
-                [
-                    "tofu",
-                    "apply",
-                    "-auto-approve",
-                    f"-var=manifest_folder={manifest_folder}",
-                    f"-var=master_ip={master_ip}",
-                    f"-var=ssh_private_key_path={ssh_key_path}",
-                    f"-var=ssh_user={ssh_user}",
-                    f"-var=ssh_port={ssh_port}",
-                ],
+                ["tofu", "apply", "-auto-approve"] + apply_vars,
                 cwd=str(copy_dir),
                 description="OpenTofu apply",
                 env=env_vars,
@@ -946,7 +1006,11 @@ class Swarmchestrate:
             {
                 "master_ip": "1.2.3.4",
                 "ssh_user": "ubuntu",
-                "ssh_private_key_path": "/path/to/key.pem",
+                "ssh_key": "/path/to/key.pem",  # for key auth (preferred)
+                "ssh_private_key_path": "/path/to/key.pem",  # legacy alias
+                "ssh_key_path": "/path/to/key.pem",  # legacy alias
+                "ssh_auth_method": "key" or "password",
+                "ssh_password": "optional-password",  # for password auth
                 "ssh_port": 22,
                 "namespace": "optional-namespace",
                 "secret_names": ["optional-name1", "optional-name2"]
@@ -965,13 +1029,31 @@ class Swarmchestrate:
         # Get cluster connection from method input
         master_ip = cluster_config.get("master_ip")
         ssh_user = cluster_config.get("ssh_user")
-        ssh_key_path = cluster_config.get("ssh_private_key_path")
+        ssh_key = (
+            cluster_config.get("ssh_key")
+            or cluster_config.get("ssh_private_key_path")
+            or cluster_config.get("ssh_key_path")
+            or ""
+        )
+        ssh_auth_method = cluster_config.get("ssh_auth_method", "key")
+        ssh_password = cluster_config.get("ssh_password", "")
         ssh_port = cluster_config.get("ssh_port", 22)
         namespace = cluster_config.get("namespace", "default")
         secret_names = cluster_config.get("secret_names", [])
 
-        if not all([master_ip, ssh_user, ssh_key_path]):
-            raise ValueError("Cluster config missing required keys")
+        if not all([master_ip, ssh_user]):
+            raise ValueError(
+                "Cluster config missing required keys: master_ip, ssh_user"
+            )
+
+        if ssh_auth_method not in {"key", "password"}:
+            raise ValueError("ssh_auth_method must be either 'key' or 'password'")
+
+        if ssh_auth_method == "key" and not ssh_key:
+            raise ValueError("ssh_key is required for key-based auth")
+
+        if ssh_auth_method == "password" and not ssh_password:
+            raise ValueError("ssh_password is required for password-based auth")
 
         # Validate secret_names length if provided
         if secret_names and len(secret_names) != len(registries):
@@ -1013,10 +1095,16 @@ class Swarmchestrate:
                 f"-var=passwords={json.dumps(passwords)}",
                 f"-var=master_ip={master_ip}",
                 f"-var=ssh_user={ssh_user}",
-                f"-var=ssh_private_key_path={ssh_key_path}",
                 f"-var=ssh_port={ssh_port}",
+                f"-var=ssh_auth_method={ssh_auth_method}",
                 f"-var=namespace={namespace}",
             ]
+
+            if ssh_auth_method == "key":
+                apply_vars.append(f"-var=ssh_key={ssh_key}")
+            else:
+                apply_vars.append(f"-var=ssh_password={json.dumps(ssh_password)}")
+
             if secret_names:
                 apply_vars.append(f"-var=secret_names={json.dumps(secret_names)}")
 

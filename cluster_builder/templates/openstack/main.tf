@@ -1,3 +1,11 @@
+terraform {
+  required_providers {
+    k3s = {
+      source = "striveworks/k3s"
+      version = "1.0.0"
+    }
+  }
+}
 # variables.tf
 variable "cluster_name" {}
 variable "resource_name" {}
@@ -51,11 +59,6 @@ resource "openstack_blockstorage_volume_v3" "root_volume" {
   name        = "${var.cluster_name}-${var.resource_name}-volume"
   size        = var.volume_size
   image_id    = var.openstack_image_id
-}
-
-# Defining the port to use while instance creation
-resource "openstack_networking_port_v2" "port_1" {
-  network_id = var.network_id
 }
 
 # Security group rules
@@ -144,17 +147,8 @@ resource "openstack_networking_secgroup_rule_v2" "k3s_sg_egress" {
   description       = each.value.desc
 }
 
-resource "openstack_networking_port_secgroup_associate_v2" "port_2" {
-  port_id = openstack_networking_port_v2.port_1.id
-  enforce = true
-  # Use the provided security group ID if available, otherwise use the generated security group
-  security_group_ids = var.security_group_id != "" ? [var.security_group_id] : [openstack_networking_secgroup_v2.k3s_sg[0].id]
-}
-
 # Compute instance for each role
 resource "openstack_compute_instance_v2" "k3s_node" {
-  depends_on = [openstack_networking_port_v2.port_1] 
-
   name             = "${var.resource_name}"
   flavor_name      = var.openstack_flavor_id
   key_pair         = replace(basename(var.ssh_key), ".pem", "")
@@ -174,7 +168,7 @@ resource "openstack_compute_instance_v2" "k3s_node" {
   }
 
   network {
-    port = openstack_networking_port_v2.port_1.id
+    uuid = var.network_id
   }
 
   tags = [
@@ -185,46 +179,132 @@ resource "openstack_compute_instance_v2" "k3s_node" {
   ]
 }
 
+data "openstack_networking_port_v2" "instance_port" {
+  device_id  = openstack_compute_instance_v2.k3s_node.id
+  network_id = var.network_id
+}
+
+resource "openstack_networking_port_secgroup_associate_v2" "instance_port_sg" {
+  port_id = data.openstack_networking_port_v2.instance_port.id
+  enforce = true
+
+  # Use provided SG ID when available, otherwise use the SG created in this module.
+  security_group_ids = var.security_group_id != "" ? [var.security_group_id] : [openstack_networking_secgroup_v2.k3s_sg[0].id]
+}
+
 resource "openstack_networking_floatingip_associate_v2" "fip_association" {
   floating_ip = var.floating_ip 
-  port_id     = openstack_networking_port_v2.port_1.id
+  port_id     = data.openstack_networking_port_v2.instance_port.id
+}
+
+# Standalone master (no HA)
+resource "k3s_server" "k3s" {
+  count = (var.k3s_role == "master" && !var.ha) ? 1 : 0
+
+  auth = {
+    host        = var.floating_ip
+    user        = var.ssh_user
+    private_key_file = var.ssh_key
+  }
+
+  bootstrap_token = var.k3s_token
+  orphan          = true
+
+  config = <<-EOT
+    node-name: ${var.resource_name}
+    node-label: labels.swarmchestrate.eu/ms_id=${var.resource_name}
+    cluster-name: ${var.cluster_name}
+  EOT
 
   depends_on = [
-    openstack_compute_instance_v2.k3s_node  # Ensure the instance is created first
+    openstack_networking_port_secgroup_associate_v2.instance_port_sg,
+    openstack_networking_floatingip_associate_v2.fip_association,
   ]
 }
 
-# Provisioning via SSH
-resource "null_resource" "k3s_provision" {
-  depends_on = [openstack_networking_floatingip_associate_v2.fip_association]
+# HA init node — first server that bootstraps the cluster
+resource "k3s_server" "k3s_ha_init" {
+  count = (var.k3s_role == "master" && var.ha) ? 1 : 0
 
-  provisioner "file" {
-    content = templatefile("${path.module}/${var.k3s_role}_user_data.sh.tpl", {
-      ha           = var.ha,
-      k3s_token    = var.k3s_token,
-      master_ip    = var.master_ip,
-      cluster_name = var.cluster_name,
-      public_ip    = var.floating_ip
-      resource_name    = "${var.resource_name}"
-    })
-    destination = "/tmp/k3s_user_data.sh"
-  }
-
-  provisioner "remote-exec" {
-    inline = [
-      "rm -f ~/.ssh/known_hosts",
-      "echo 'Executing remote provisioning script on ${var.k3s_role} node'",
-      "chmod +x /tmp/k3s_user_data.sh",
-      "sudo /tmp/k3s_user_data.sh"
-    ]
-  }
-
-  connection {
-    type        = "ssh"
-    user        = var.ssh_user
-    private_key = file(var.ssh_key)
+  auth = {
     host        = var.floating_ip
+    user        = var.ssh_user
+    private_key_file = var.ssh_key
   }
+
+  bootstrap_token = var.k3s_token
+  orphan          = true
+
+  config = <<-EOT
+    node-name: ${var.resource_name}
+    node-label: labels.swarmchestrate.eu/ms_id=${var.resource_name}
+    cluster-name: ${var.cluster_name}
+  EOT
+
+  highly_available = {
+    cluster_init = true
+  }
+
+  depends_on = [
+    openstack_networking_port_secgroup_associate_v2.instance_port_sg,
+    openstack_networking_floatingip_associate_v2.fip_association,
+  ]
+}
+
+# HA join node — subsequent server nodes joining an existing master
+resource "k3s_server" "k3s_ha_join" {
+  count = var.k3s_role == "ha" ? 1 : 0
+
+  orphan = true
+
+  auth = {
+    host        = var.floating_ip
+    user        = var.ssh_user
+    private_key_file = var.ssh_key
+  }
+
+  config = <<-EOT
+    node-name: ${var.resource_name}
+    node-label: labels.swarmchestrate.eu/ms_id=${var.resource_name}
+  EOT
+
+  highly_available = {
+    cluster_init = false
+    server       = "https://${var.master_ip}:6443"
+    token        = var.k3s_token
+  }
+
+  depends_on = [
+    openstack_networking_port_secgroup_associate_v2.instance_port_sg,
+    openstack_networking_floatingip_associate_v2.fip_association,
+  ]
+}
+
+# Worker node
+resource "k3s_agent" "k3s" {
+  count = var.k3s_role == "worker" ? 1 : 0
+
+  orphan = true
+
+  auth = {
+    host        = var.floating_ip
+    user        = var.ssh_user
+    private_key_file = var.ssh_key
+  }
+
+  server = "https://${var.master_ip}:6443"
+  token  = var.k3s_token
+
+  config = <<-EOT
+    node-name: ${var.resource_name}
+    node-label: labels.swarmchestrate.eu/ms_id=${var.resource_name}
+  EOT
+
+
+  depends_on = [
+    openstack_networking_port_secgroup_associate_v2.instance_port_sg,
+    openstack_networking_floatingip_associate_v2.fip_association,
+  ]
 }
 
 # outputs.tf

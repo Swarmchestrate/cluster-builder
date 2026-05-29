@@ -114,6 +114,24 @@ Rename manifest-config.json.sample to manifest-config.json or create a new file.
 #### How to Use:
 **Input:** manifest-config.json
 
+SSH authentication supports both key and password.
+
+Example manifest-config.json:
+
+```json
+{
+	"manifest_folder": "/workspaces/cluster-builder/manifest",
+	"master_ip": "193.225.250.17",
+	"ssh_user": "ubuntu",
+	"ssh_port": 22,
+	"ssh_auth_method": "key",
+	"ssh_key": "/workspaces/cluster-builder/scripts/g.pem",
+	"ssh_password": ""
+}
+```
+
+For password auth, set `ssh_auth_method` to `password`, provide `ssh_password`, and leave `ssh_key` empty.
+
 To run the script: 
 
 ```python
@@ -127,6 +145,8 @@ This script configures container registry authentication for your cluster.
 
 #### How to Use:
 **Input:** It reads credentials from the .env file and updates the cluster accordingly.
+
+Cluster SSH authentication for secret creation supports both key and password through the `registry_config` object (`ssh_auth_method`, `ssh_key`, `ssh_password`).
 
 Update your .env file with registry credentials (comma-separated lists):
 

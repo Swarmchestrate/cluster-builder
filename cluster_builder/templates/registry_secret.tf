@@ -17,7 +17,16 @@ variable "secret_names" {
 
 variable "master_ip" {}
 variable "ssh_user" {}
-variable "ssh_private_key_path" {}
+variable "ssh_key" {
+  default = ""
+}
+variable "ssh_password" {
+  default   = ""
+  sensitive = true
+}
+variable "ssh_auth_method" {
+  default = "key"
+}
 variable "ssh_port" {
   default = 22
 }
@@ -32,7 +41,8 @@ resource "null_resource" "docker_registry_secrets" {
     type        = "ssh"
     host        = var.master_ip
     user        = var.ssh_user
-    private_key = file(var.ssh_private_key_path)
+    private_key = var.ssh_auth_method == "key" ? file(var.ssh_key) : null
+    password    = var.ssh_auth_method == "password" ? var.ssh_password : null
     port        = var.ssh_port
   }
 

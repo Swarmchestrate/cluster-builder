@@ -1,7 +1,9 @@
 {
   "manifest_folder": "/workspaces/cluster-builder/manifest",
   "master_ip": "193.225.250.17",
-  "ssh_key_path": "/workspaces/cluster-builder/scripts/g.pem",
+  "ssh_key": "/workspaces/cluster-builder/scripts/g.pem",
   "ssh_user": "ubuntu",
-  "ssh_port": 22
+  "ssh_port": 22,
+  "ssh_auth_method": "key",
+  "ssh_password": ""
 }

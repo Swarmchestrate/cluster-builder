@@ -150,7 +150,4 @@ class ClusterConfig:
             logger.error(error_msg)
             raise RuntimeError(error_msg)
 
-        # Copy user data template
-        self.template_manager.copy_user_data_template(role, cloud)
-
         return cluster_dir, prepared_config
