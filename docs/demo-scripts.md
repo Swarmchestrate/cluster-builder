@@ -140,6 +140,19 @@ python deploy_manifests.py
 
 ---
 
+### remove-manifest.py
+This script undeploys manifests previously applied by `deploy-manifest.py`. It removes the manifest files from the K3s server manifests folder (so K3s prunes their resources) and also deletes any Deployments/Services left in the `default` namespace by applications the manifests launched afterwards.
+
+Uses the same `manifest-config.json` as `deploy-manifest.py` (see above).
+
+To run the script:
+
+```python
+python remove-manifest.py
+```
+
+---
+
 ### registry.py
 This script configures container registry authentication for your cluster.
 
