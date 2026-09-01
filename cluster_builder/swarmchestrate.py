@@ -998,6 +998,113 @@ class Swarmchestrate:
             if copy_dir.exists():
                 shutil.rmtree(copy_dir)
 
+    def remove_manifests(
+        self,
+        manifest_folder: str,
+        master_ip: str,
+        ssh_user: str,
+        ssh_key: str = "",
+        ssh_key_path: str = "",
+        ssh_port: int = 22,
+        ssh_auth_method: str = "key",
+        ssh_password: str = "",
+    ):
+        """
+        Remove previously deployed manifests from a cluster using remove_manifest.tf
+        in a temporary folder. Deletes the manifest files (matching the names found in
+        manifest_folder) from the K3s server manifests directory, which causes K3s to
+        prune the associated resources.
+
+        Args:
+            manifest_folder: Path to local manifest folder (used to determine file names)
+            master_ip: IP address of K3s master
+            ssh_key: Path to SSH private key (preferred)
+            ssh_key_path: Deprecated alias for ssh_key
+            ssh_user: SSH username to connect to the master node
+            ssh_port: SSH port for the master node (defaults to 22)
+            ssh_auth_method: SSH auth method, either "key" or "password"
+            ssh_password: SSH password when ssh_auth_method is "password"
+        """
+        resolved_ssh_key = ssh_key or ssh_key_path
+
+        if ssh_auth_method not in {"key", "password"}:
+            raise ValueError("ssh_auth_method must be either 'key' or 'password'")
+
+        if ssh_auth_method == "key" and not resolved_ssh_key:
+            raise ValueError("ssh_key is required when ssh_auth_method is 'key'")
+
+        if ssh_auth_method == "password" and not ssh_password:
+            raise ValueError(
+                "ssh_password is required when ssh_auth_method is 'password'"
+            )
+
+        # Dedicated folder for remove-manifest operations
+        remove_dir = Path(self.output_dir) / "remove-manifest"
+        remove_dir.mkdir(parents=True, exist_ok=True)
+
+        logger.debug(f"Using remove-manifest folder: {remove_dir}")
+
+        try:
+            # Copy remove_manifest.tf from templates
+            tf_source_file = (
+                Path(self.template_manager.templates_dir) / "remove_manifest.tf"
+            )
+            if not tf_source_file.exists():
+                logger.debug(f"remove_manifest.tf not found at: {tf_source_file}")
+                raise RuntimeError(f"remove_manifest.tf not found at: {tf_source_file}")
+            shutil.copy(tf_source_file, remove_dir)
+            logger.debug(f"Copied remove_manifest.tf to {remove_dir}")
+
+            # Prepare environment for OpenTofu
+            env_vars = os.environ.copy()
+            env_vars["TF_LOG"] = os.getenv("TF_LOG", "INFO")
+            env_vars["TF_LOG_PATH"] = os.getenv("TF_LOG_PATH", "/tmp/opentofu.log")
+
+            logger.info(
+                f"------------ Removing manifests from node: {master_ip} -------------------"
+            )
+
+            # Run tofu init with spinner
+            CommandExecutor.run_command(
+                ["tofu", "init"],
+                cwd=str(remove_dir),
+                description="OpenTofu init",
+                env=env_vars,
+            )
+
+            # Run tofu apply with spinner
+            apply_vars = [
+                f"-var=manifest_folder={manifest_folder}",
+                f"-var=master_ip={master_ip}",
+                f"-var=ssh_user={ssh_user}",
+                f"-var=ssh_port={ssh_port}",
+                f"-var=ssh_auth_method={ssh_auth_method}",
+            ]
+
+            if ssh_auth_method == "key":
+                apply_vars.append(f"-var=ssh_key={resolved_ssh_key}")
+            else:
+                apply_vars.append(f"-var=ssh_password={json.dumps(ssh_password)}")
+
+            CommandExecutor.run_command(
+                ["tofu", "apply", "-auto-approve"] + apply_vars,
+                cwd=str(remove_dir),
+                description="OpenTofu apply",
+                env=env_vars,
+            )
+
+            logger.info(
+                "------------ Successfully removed manifests -------------------"
+            )
+
+        except RuntimeError as e:
+            print(f"\n---------- ERROR ----------\n{e}\n")
+            raise
+
+        finally:
+            if remove_dir.exists():
+                shutil.rmtree(remove_dir)
+
     def create_registry_secrets(self, cluster_config: dict):
         """
         Create Docker registry secrets in Kubernetes using OpenTofu.
