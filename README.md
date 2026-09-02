@@ -127,8 +127,8 @@ To remove a specific node from a cluster:
 ```python
 # Remove a node by its resource name
 orchestrator.remove_node(
-    cluster_name="your-cluster-name",
-    resource_name="eloquent_feynman"  # The resource identifier of the node
+    cluster_name="your_cluster_name",
+    resource_name="eloquent-feynman"  # The resource identifier of the node
 )
 ```
 
@@ -143,7 +143,7 @@ To completely destroy a cluster and all its nodes:
 ```python
 # Destroy the entire cluster
 orchestrator.destroy(
-    cluster_name="your-cluster-name"
+    cluster_name="your_cluster_name"
 )
 ```
 
@@ -225,7 +225,7 @@ By default, cluster names are generated automatically. To specify a custom name:
 
 ```python
 config = {
-    "cluster_name": "production-cluster",
+    "cluster_name": "production_cluster",
     # ... other configuration ...
 }
 ```

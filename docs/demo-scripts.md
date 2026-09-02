@@ -77,7 +77,7 @@ This script removes a specific node from a cluster.
 
 ```python
 cluster_name = "boring_liskov"
-resource_name  = "aws_sweet_swanson"
+resource_name  = "aws-sweet-swanson"
 ```
 Run the script to remove the node from the cluster.
 
