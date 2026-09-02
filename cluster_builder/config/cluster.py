@@ -3,6 +3,7 @@ Cluster configuration management.
 """
 
 import os
+import re
 import logging
 import secrets
 import string
@@ -12,6 +13,10 @@ from typing import Any
 from cluster_builder.infrastructure import TemplateManager
 
 logger = logging.getLogger("swarmchestrate")
+
+# RFC 1123 label: lowercase alphanumerics or '-', starting/ending with an alphanumeric, max 63 chars
+RFC_1123_LABEL_RE = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
+RFC_1123_MAX_LENGTH = 63
 
 
 class ClusterConfig:
@@ -31,6 +36,32 @@ class ClusterConfig:
         """
         self.template_manager = template_manager
         self.output_dir = output_dir
+
+    @staticmethod
+    def validate_rfc1123_name(name: str, field_name: str) -> None:
+        """
+        Validate that a name is RFC 1123 compliant (used for k8s resource names).
+
+        Args:
+            name: The name to validate
+            field_name: Name of the field, used in the error message
+
+        Raises:
+            ValueError: If the name is not RFC 1123 compliant
+        """
+        if (
+            not name
+            or len(name) > RFC_1123_MAX_LENGTH
+            or not RFC_1123_LABEL_RE.match(name)
+        ):
+            error_msg = (
+                f"Invalid {field_name} '{name}': must be RFC 1123 compliant "
+                f"(lowercase alphanumeric characters or '-', start/end with an "
+                f"alphanumeric character, max {RFC_1123_MAX_LENGTH} characters). "
+                "Underscores are not permitted."
+            )
+            logger.error(error_msg)
+            raise ValueError(error_msg)
 
     def get_cluster_output_dir(self, cluster_name: str) -> str:
         """
@@ -127,6 +158,7 @@ class ClusterConfig:
             logger.debug(
                 f"Adding node to existing cluster: {prepared_config['cluster_name']}"
             )
+        self.validate_rfc1123_name(prepared_config["cluster_name"], "cluster_name")
 
         cluster_dir = self.get_cluster_output_dir(prepared_config["cluster_name"])
         logger.debug(f"Cluster directory: {cluster_dir}")
@@ -140,6 +172,7 @@ class ClusterConfig:
             logger.debug(
                 f" Using provided Resource name: {prepared_config['resource_name']}"
             )
+        self.validate_rfc1123_name(prepared_config["resource_name"], "resource_name")
 
         # Create the cluster directory
         try:
