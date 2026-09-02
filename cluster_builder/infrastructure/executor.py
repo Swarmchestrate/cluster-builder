@@ -3,6 +3,7 @@ Command execution utilities for infrastructure management.
 """
 
 import subprocess
+import sys
 import logging
 
 from yaspin import yaspin
@@ -62,8 +63,10 @@ class CommandExecutor:
                 pass  # Still running → spinner starts
 
         # Either timeout <= 5s, or process still running after 5s
+        # color is only supported on a real terminal (avoids yaspin UserWarning in Jupyter)
+        spinner_kwargs = {"color": "cyan"} if sys.stdout.isatty() else {}
         spinner = (
-            yaspin(Spinners.point, text=f"Running {description}...", color="cyan")
+            yaspin(Spinners.point, text=f"Running {description}...", **spinner_kwargs)
             if show_spinner
             else None
         )
