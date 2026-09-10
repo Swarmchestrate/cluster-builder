@@ -198,7 +198,9 @@ class ClusterConfig:
             logger.debug(
                 f"Adding node to existing cluster: {prepared_config['cluster_name']}"
             )
-        self.validate_pg_identifier_name(prepared_config["cluster_name"], "cluster_name")
+        self.validate_pg_identifier_name(
+            prepared_config["cluster_name"], "cluster_name"
+        )
 
         cluster_dir = self.get_cluster_output_dir(prepared_config["cluster_name"])
         logger.debug(f"Cluster directory: {cluster_dir}")

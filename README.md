@@ -90,8 +90,7 @@ from cluster_builder import Swarmchestrate
 
 # Initialise the orchestrator
 orchestrator = Swarmchestrate(
-    template_dir="/path/to/templates",
-    output_dir="/path/to/output"
+    template_dir="/path/to/templates", output_dir="/path/to/output"
 )
 ```
 
@@ -105,7 +104,7 @@ You may define it directly as a Python dictionary or load it from a separate fil
 #### 2. Load the configuration in Python:
 
 ```python
-config ={ 
+config = {
     # your config fields here
 }
 
@@ -128,7 +127,7 @@ To remove a specific node from a cluster:
 # Remove a node by its resource name
 orchestrator.remove_node(
     cluster_name="your_cluster_name",
-    resource_name="eloquent-feynman"  # The resource identifier of the node
+    resource_name="eloquent-feynman",  # The resource identifier of the node
 )
 ```
 
@@ -142,9 +141,7 @@ To completely destroy a cluster and all its nodes:
 
 ```python
 # Destroy the entire cluster
-orchestrator.destroy(
-    cluster_name="your_cluster_name"
-)
+orchestrator.destroy(cluster_name="your_cluster_name")
 ```
 
 The **destroy** method:
@@ -163,9 +160,9 @@ orchestrator.deploy_manifests(
     manifest_folder="path/to/manifests",
     master_ip="MASTER_NODE_IP",
     ssh_user="USERNAME",
-    ssh_key="path/to/key.pem",        # for key auth
-    ssh_auth_method="key",            # or "password"
-    ssh_password=""                   # required when ssh_auth_method="password"
+    ssh_key="path/to/key.pem",  # for key auth
+    ssh_auth_method="key",  # or "password"
+    ssh_password="",  # required when ssh_auth_method="password"
 )
 ```
 ---
