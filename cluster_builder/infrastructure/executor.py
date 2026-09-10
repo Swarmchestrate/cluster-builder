@@ -2,8 +2,9 @@
 Command execution utilities for infrastructure management.
 """
 
-import subprocess
 import logging
+import subprocess
+import sys
 
 from yaspin import yaspin
 from yaspin.spinners import Spinners
@@ -19,8 +20,8 @@ class CommandExecutor:
         command: list,
         cwd: str,
         description: str = "command",
-        timeout: int = None,
-        env: dict = None,  # <-- Add optional env param
+        timeout: int | None = None,
+        env: dict | None = None,  # <-- Add optional env param
     ) -> str:
         """
         Execute a shell command with proper logging and error handling.
@@ -62,8 +63,10 @@ class CommandExecutor:
                 pass  # Still running → spinner starts
 
         # Either timeout <= 5s, or process still running after 5s
+        # color is only supported on a real terminal (avoids yaspin UserWarning in Jupyter)
+        spinner_kwargs = {"color": "cyan"} if sys.stdout.isatty() else {}
         spinner = (
-            yaspin(Spinners.point, text=f"Running {description}...", color="cyan")
+            yaspin(Spinners.point, text=f"Running {description}...", **spinner_kwargs)
             if show_spinner
             else None
         )

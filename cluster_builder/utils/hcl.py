@@ -1,11 +1,16 @@
 import json
-import os
-import hcl2
-from lark import Tree, Token
 import logging
+import os
 import re
 
+import hcl2
+from lark import Token, Tree
+
 logger = logging.getLogger("cluster_builder")
+
+# Unquoted PostgreSQL identifier: starts with a letter or underscore, followed
+# by letters, digits, or underscores, max 63 characters.
+PG_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,62}$")
 
 
 def sanitize_module_name(module_name: str) -> str:
@@ -16,13 +21,35 @@ def sanitize_module_name(module_name: str) -> str:
     return sanitized
 
 
+def validate_pg_identifier(name: str, field_name: str = "schema_name") -> None:
+    """
+    Validate that a name is a valid, unquoted PostgreSQL identifier.
+
+    Raises:
+        ValueError: If the name is not a valid PostgreSQL identifier
+    """
+    if not PG_IDENTIFIER_RE.match(name):
+        error_msg = (
+            f"Invalid {field_name} '{name}': must start with a letter or "
+            "underscore and contain only letters, digits, and underscores "
+            "(max 63 characters)"
+        )
+        logger.error(error_msg)
+        raise ValueError(error_msg)
+
+
 def add_backend_config(backend_tf_path, conn_str, schema_name):
     """
     Adds a PostgreSQL backend configuration to a Terraform file.
     - `backend_tf_path`: path to backend.tf for this configuration
     - `conn_str`: PostgreSQL connection string
-    - `schema_name`: Schema name for Terraform state
+    - `schema_name`: Schema name for Terraform state (sanitized into a valid,
+      unquoted PostgreSQL identifier — hyphens from RFC 1123 names are not
+      valid there, so they are converted to underscores)
     """
+    schema_name = sanitize_module_name(schema_name)
+    validate_pg_identifier(schema_name, "schema_name")
+
     # Check if the backend configuration already exists
     if os.path.exists(backend_tf_path):
         with open(backend_tf_path) as f:
@@ -215,8 +242,8 @@ def remove_module_block(main_tf_path, module_name: str):
             tree = hcl2.parse(f)
             # Debug: Log the parsed tree structure
             logger.debug("Parsed Tree: %s", tree)
-    except Exception as e:
-        logger.error("❌ Failed to parse HCL in %s: %s", main_tf_path, e, exc_info=True)
+    except Exception:
+        logger.exception("❌ Failed to parse HCL in %s", main_tf_path)
         return
 
     # Process tree to remove target module block
@@ -239,14 +266,8 @@ def remove_module_block(main_tf_path, module_name: str):
             f.write(new_source)
 
         logger.debug("🗑️ Removed module '%s' from %s", module_name, main_tf_path)
-    except Exception as e:
-        logger.error(
-            "❌ Failed to reconstruct HCL in %s: %s", main_tf_path, e, exc_info=True
-        )
-        # Print more detailed error information
-        import traceback
-
-        traceback.print_exc()
+    except Exception:
+        logger.exception("❌ Failed to reconstruct HCL in %s", main_tf_path)
 
 
 def extract_template_variables(template_path):
@@ -281,7 +302,7 @@ def extract_template_variables(template_path):
         logger.warning(f"⚠️ Template file not found: {template_path}")
         return {}
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - wrap any parse failure into a ValueError
         error_msg = f"Failed to extract variables from {template_path}: {e}"
         logger.error(f"❌ {error_msg}")
         raise ValueError(error_msg)

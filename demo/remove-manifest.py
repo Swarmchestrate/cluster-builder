@@ -11,8 +11,8 @@ manifest_folder = Path(cfg["manifest_folder"])
 if not manifest_folder.exists():
     raise SystemExit(f"❌ Manifest folder does not exist: {manifest_folder}")
 
-# Run copy-manifest
-Swarmchestrate(template_dir="templates", output_dir="output").deploy_manifests(
+# Run remove-manifest
+Swarmchestrate(template_dir="templates", output_dir="output").remove_manifests(
     manifest_folder=str(manifest_folder),
     master_ip=cfg["master_ip"],
     ssh_user=cfg["ssh_user"],

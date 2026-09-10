@@ -2,8 +2,8 @@
 PostgreSQL configuration for Terraform state backend.
 """
 
-import os
 import logging
+import os
 from dataclasses import dataclass
 
 logger = logging.getLogger("swarmchestrate")

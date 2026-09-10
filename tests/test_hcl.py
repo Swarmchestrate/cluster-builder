@@ -1,7 +1,9 @@
+import logging
 import os
 import tempfile
+
 import hcl2
-import logging
+
 from cluster_builder.utils.hcl import (
     add_backend_config,
     add_module_block,
@@ -144,7 +146,7 @@ def test_remove_module_block_handles_missing_file():
         # Act & Assert
         try:
             remove_module_block(main_tf_path, module_name)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - test asserts no exception is raised
             assert False, f"Exception was raised: {e}"
 
 
@@ -164,7 +166,7 @@ def test_remove_module_block_handles_invalid_hcl():
         # Act & Assert
         try:
             remove_module_block(main_tf_path, module_name)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - test asserts no exception is raised
             assert False, f"Exception was raised: {e}"
 
 

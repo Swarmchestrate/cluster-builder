@@ -2,16 +2,26 @@
 Cluster configuration management.
 """
 
-import os
 import logging
+import os
+import re
 import secrets
 import string
+from typing import Any
+
 from names_generator import generate_name
 
-from typing import Any
 from cluster_builder.infrastructure import TemplateManager
 
 logger = logging.getLogger("swarmchestrate")
+
+# RFC 1123 label: lowercase alphanumerics or '-', starting/ending with an alphanumeric, max 63 chars
+RFC_1123_LABEL_RE = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
+RFC_1123_MAX_LENGTH = 63
+
+# Unquoted PostgreSQL identifier: starts with a letter or underscore, followed
+# by letters, digits, or underscores, max 63 characters. No hyphens allowed.
+PG_IDENTIFIER_RE = re.compile(r"^[a-z_][a-z0-9_]{0,62}$")
 
 
 class ClusterConfig:
@@ -32,6 +42,55 @@ class ClusterConfig:
         self.template_manager = template_manager
         self.output_dir = output_dir
 
+    @staticmethod
+    def validate_rfc1123_name(name: str, field_name: str) -> None:
+        """
+        Validate that a name is RFC 1123 compliant (used for k8s resource names).
+
+        Args:
+            name: The name to validate
+            field_name: Name of the field, used in the error message
+
+        Raises:
+            ValueError: If the name is not RFC 1123 compliant
+        """
+        if (
+            not name
+            or len(name) > RFC_1123_MAX_LENGTH
+            or not RFC_1123_LABEL_RE.match(name)
+        ):
+            error_msg = (
+                f"Invalid {field_name} '{name}': must be RFC 1123 compliant "
+                f"(lowercase alphanumeric characters or '-', start/end with an "
+                f"alphanumeric character, max {RFC_1123_MAX_LENGTH} characters). "
+                "Underscores are not permitted."
+            )
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+
+    @staticmethod
+    def validate_pg_identifier_name(name: str, field_name: str) -> None:
+        """
+        Validate that a name is a valid, unquoted PostgreSQL identifier (used
+        for cluster_name, which doubles as the Terraform state schema name).
+
+        Args:
+            name: The name to validate
+            field_name: Name of the field, used in the error message
+
+        Raises:
+            ValueError: If the name is not a valid PostgreSQL identifier
+        """
+        if not name or not PG_IDENTIFIER_RE.match(name):
+            error_msg = (
+                f"Invalid {field_name} '{name}': must start with a lowercase "
+                "letter or underscore and contain only lowercase letters, "
+                "digits, and underscores (max 63 characters). Hyphens are not "
+                "permitted."
+            )
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+
     def get_cluster_output_dir(self, cluster_name: str) -> str:
         """
         Get the output directory path for a specific cluster.
@@ -46,7 +105,8 @@ class ClusterConfig:
 
     def generate_random_name(self) -> str:
         """
-        Generate a readable random string using names-generator.
+        Generate a readable, RFC 1123 compliant random string (hyphen-separated)
+        using names-generator. Used for resource_name.
 
         Returns:
             A randomly generated name
@@ -54,6 +114,18 @@ class ClusterConfig:
         name = generate_name()
         name = name.replace("_", "-")
         logger.debug(f"Generated random name: {name}")
+        return name
+
+    def generate_cluster_name(self) -> str:
+        """
+        Generate a readable, PostgreSQL-safe random string (underscore-separated)
+        using names-generator. Used for cluster_name.
+
+        Returns:
+            A randomly generated cluster name
+        """
+        name = generate_name()
+        logger.debug(f"Generated cluster name: {name}")
         return name
 
     def generate_k3s_token(self, length: int = 16) -> str:
@@ -120,13 +192,16 @@ class ClusterConfig:
 
         # Generate a cluster name if not provided
         if "cluster_name" not in prepared_config:
-            cluster_name = self.generate_random_name()
+            cluster_name = self.generate_cluster_name()
             prepared_config["cluster_name"] = cluster_name
             logger.debug(f"Creating new cluster: {cluster_name}")
         else:
             logger.debug(
                 f"Adding node to existing cluster: {prepared_config['cluster_name']}"
             )
+        self.validate_pg_identifier_name(
+            prepared_config["cluster_name"], "cluster_name"
+        )
 
         cluster_dir = self.get_cluster_output_dir(prepared_config["cluster_name"])
         logger.debug(f"Cluster directory: {cluster_dir}")
@@ -140,6 +215,7 @@ class ClusterConfig:
             logger.debug(
                 f" Using provided Resource name: {prepared_config['resource_name']}"
             )
+        self.validate_rfc1123_name(prepared_config["resource_name"], "resource_name")
 
         # Create the cluster directory
         try:
