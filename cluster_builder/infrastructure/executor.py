@@ -2,9 +2,9 @@
 Command execution utilities for infrastructure management.
 """
 
+import logging
 import subprocess
 import sys
-import logging
 
 from yaspin import yaspin
 from yaspin.spinners import Spinners
@@ -20,8 +20,8 @@ class CommandExecutor:
         command: list,
         cwd: str,
         description: str = "command",
-        timeout: int = None,
-        env: dict = None,  # <-- Add optional env param
+        timeout: int | None = None,
+        env: dict | None = None,  # <-- Add optional env param
     ) -> str:
         """
         Execute a shell command with proper logging and error handling.

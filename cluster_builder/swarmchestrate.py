@@ -3,21 +3,22 @@ Swarmchestrate - Main orchestration class for K3s cluster management.
 """
 
 import json
-import os
 import logging
+import os
 import re
-from pathlib import Path
 import shutil
 import subprocess
-from typing import Optional, Any
-import psycopg2
-from openstack import connection
-from dotenv import load_dotenv
+import sys
+from pathlib import Path
+from typing import Any
 
-from cluster_builder.config.postgres import PostgresConfig
+import psycopg2
+from dotenv import load_dotenv
+from openstack import connection
+
 from cluster_builder.config.cluster import ClusterConfig
-from cluster_builder.infrastructure import TemplateManager
-from cluster_builder.infrastructure import CommandExecutor
+from cluster_builder.config.postgres import PostgresConfig
+from cluster_builder.infrastructure import CommandExecutor, TemplateManager
 from cluster_builder.utils import hcl
 
 logger = logging.getLogger("swarmchestrate")
@@ -32,7 +33,7 @@ class Swarmchestrate:
         self,
         template_dir: str,
         output_dir: str,
-        variables: Optional[dict[str, Any]] = None,
+        variables: dict[str, Any] | None = None,
     ):
         """
         Initialise the Swarmchestrate class.
@@ -263,7 +264,7 @@ class Swarmchestrate:
 
             return cluster_dir, prepared_config
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - wrap any preparation failure into a RuntimeError
             error_msg = f"❌ Failed to prepare infrastructure: {e}"
             logger.error(error_msg)
             raise RuntimeError(error_msg)
@@ -356,8 +357,7 @@ class Swarmchestrate:
             result = subprocess.run(
                 ["tofu", "output", "-json"],
                 cwd=cluster_dir,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                capture_output=True,
                 text=True,
                 check=True,
                 env=env_vars,
@@ -407,7 +407,7 @@ class Swarmchestrate:
             logger.error(error_msg)
             raise RuntimeError(error_msg)
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - wrap any deployment failure into a RuntimeError
             error_msg = f"❌ Failed to add node: {e}"
             logger.error(error_msg)
             raise RuntimeError(error_msg)
@@ -530,7 +530,7 @@ class Swarmchestrate:
             )
 
         except RuntimeError as e:
-            error_msg = f"❌ Failed to remove node '{resource_name}' from cluster '{cluster_name}': {str(e)}"
+            error_msg = f"❌ Failed to remove node '{resource_name}' from cluster '{cluster_name}': {e!s}"
             logger.error(error_msg)
             raise RuntimeError(error_msg)
 
@@ -561,7 +561,7 @@ class Swarmchestrate:
         # Check if the environment variables are set
         if not tf_log or not tf_log_path:
             print("❌ Error: Missing required environment variables.")
-            exit(1)
+            sys.exit(1)
 
         # Prepare environment variables for subprocess
         env_vars = os.environ.copy()
@@ -605,7 +605,7 @@ class Swarmchestrate:
                         env=env_vars,
                     )
                 except RuntimeError as e:
-                    error_msg = f"❌ Failed to create workspace '{workspace}': {str(e)}"
+                    error_msg = f"❌ Failed to create workspace '{workspace}': {e!s}"
                     logger.error(error_msg)
                     raise RuntimeError(error_msg)
 
@@ -618,7 +618,7 @@ class Swarmchestrate:
                     env=env_vars,
                 )
             except RuntimeError as e:
-                error_msg = f"❌ Failed to select workspace '{workspace}': {str(e)}"
+                error_msg = f"❌ Failed to select workspace '{workspace}': {e!s}"
                 logger.error(error_msg)
                 raise RuntimeError(error_msg)
 
@@ -650,7 +650,7 @@ class Swarmchestrate:
             logger.info("Infrastructure successfully updated")
 
         except RuntimeError as e:
-            error_msg = f"❌ Failed to deploy infrastructure: {str(e)}"
+            error_msg = f"❌ Failed to deploy infrastructure: {e!s}"
             logger.error(error_msg)
             raise RuntimeError(error_msg)
 
@@ -738,13 +738,12 @@ class Swarmchestrate:
                     current_role = role_match.group(1).lower()
 
                 if brace_depth <= 0:
-                    if current_module:
-                        if current_role:
-                            module_role[current_module] = current_role
+                    if current_module and current_role:
+                        module_role[current_module] = current_role
                     current_module = None
                     current_role = None
                     brace_depth = 0
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - best-effort metadata parsing, fall back on failure
             logger.debug(f"Could not parse module role metadata from main.tf: {e}")
 
         # ---------- STEP 1: collect role metadata ----------
@@ -834,7 +833,7 @@ class Swarmchestrate:
                 logger.info(f"✔ Destroyed {ws}")
 
             except RuntimeError as e:
-                logger.warning(f"⚠ Failed destroying {ws}: {str(e)}")
+                logger.warning(f"⚠ Failed destroying {ws}: {e!s}")
 
         # cleanup DB + folder
         self.remove_cluster_schema_from_db(cluster_name)

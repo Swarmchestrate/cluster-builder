@@ -1,9 +1,10 @@
 import json
-import os
-import hcl2
-from lark import Tree, Token
 import logging
+import os
 import re
+
+import hcl2
+from lark import Token, Tree
 
 logger = logging.getLogger("cluster_builder")
 
@@ -241,8 +242,8 @@ def remove_module_block(main_tf_path, module_name: str):
             tree = hcl2.parse(f)
             # Debug: Log the parsed tree structure
             logger.debug("Parsed Tree: %s", tree)
-    except Exception as e:
-        logger.error("❌ Failed to parse HCL in %s: %s", main_tf_path, e, exc_info=True)
+    except Exception:
+        logger.exception("❌ Failed to parse HCL in %s", main_tf_path)
         return
 
     # Process tree to remove target module block
@@ -265,14 +266,8 @@ def remove_module_block(main_tf_path, module_name: str):
             f.write(new_source)
 
         logger.debug("🗑️ Removed module '%s' from %s", module_name, main_tf_path)
-    except Exception as e:
-        logger.error(
-            "❌ Failed to reconstruct HCL in %s: %s", main_tf_path, e, exc_info=True
-        )
-        # Print more detailed error information
-        import traceback
-
-        traceback.print_exc()
+    except Exception:
+        logger.exception("❌ Failed to reconstruct HCL in %s", main_tf_path)
 
 
 def extract_template_variables(template_path):
@@ -307,7 +302,7 @@ def extract_template_variables(template_path):
         logger.warning(f"⚠️ Template file not found: {template_path}")
         return {}
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - wrap any parse failure into a ValueError
         error_msg = f"Failed to extract variables from {template_path}: {e}"
         logger.error(f"❌ {error_msg}")
         raise ValueError(error_msg)

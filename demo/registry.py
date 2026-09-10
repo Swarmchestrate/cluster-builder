@@ -1,5 +1,6 @@
-from cluster_builder import Swarmchestrate
 import logging
+
+from cluster_builder import Swarmchestrate
 
 logger = logging.getLogger("registry")
 

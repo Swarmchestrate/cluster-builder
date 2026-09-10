@@ -2,14 +2,15 @@
 Cluster configuration management.
 """
 
+import logging
 import os
 import re
-import logging
 import secrets
 import string
+from typing import Any
+
 from names_generator import generate_name
 
-from typing import Any
 from cluster_builder.infrastructure import TemplateManager
 
 logger = logging.getLogger("swarmchestrate")
