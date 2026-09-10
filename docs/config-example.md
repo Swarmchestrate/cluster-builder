@@ -93,7 +93,7 @@ config = {
     "ssh_key": "/path/to/key.pem",  # required if ssh_auth_method == "key"
     # "ssh_password": "your_password",  # required if ssh_auth_method == "password"
     "k3s_token": "testtoken",
-    "k3s_role": "worker", # could be master or worker
-    "ha": False, # need this one only for master
-    }
+    "k3s_role": "worker",  # could be master or worker
+    "ha": False,  # need this one only for master
+}
 ```
