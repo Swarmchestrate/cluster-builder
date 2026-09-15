@@ -34,7 +34,12 @@ config = {
             "protocol": "tcp",
             "destination": "0.0.0.0/0"
         }
-        ]
+        ],
+    // Optional k3s node labels in key=value form
+    "node_labels": [
+        "environment=production",
+        "region=eu-west-1"
+    ]
 }
 ```
 
