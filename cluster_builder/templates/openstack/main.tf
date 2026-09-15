@@ -53,7 +53,7 @@ variable "custom_egress_ports" {
 }
 
 variable "node_labels" {
-  description = "Additional k3s node labels in key=value form"
+  description = "Optional k3s node labels in key=value form"
   type        = list(string)
   default     = []
 }
