@@ -219,9 +219,9 @@ resource "k3s_server" "k3s" {
   config = <<-EOT
     node-name: ${var.resource_name}
     node-label:
-    %{ for label in var.node_labels ~}
+    %{~ for label in var.node_labels ~}
       - ${label}
-    %{ endfor ~}
+    %{~ endfor ~}
     cluster-name: ${var.cluster_name}
   EOT
 
@@ -247,9 +247,9 @@ resource "k3s_server" "k3s_ha_init" {
   config = <<-EOT
     node-name: ${var.resource_name}
     node-label:
-    %{ for label in var.node_labels ~}
+    %{~ for label in var.node_labels ~}
       - ${label}
-    %{ endfor ~}
+    %{~ endfor ~}
     cluster-name: ${var.cluster_name}
   EOT
 
@@ -278,9 +278,9 @@ resource "k3s_server" "k3s_ha_join" {
   config = <<-EOT
     node-name: ${var.resource_name}
     node-label:
-    %{ for label in var.node_labels ~}
+    %{~ for label in var.node_labels ~}
       - ${label}
-    %{ endfor ~}
+    %{~ endfor ~}
   EOT
 
   highly_available = {
@@ -313,9 +313,9 @@ resource "k3s_agent" "k3s" {
   config = <<-EOT
     node-name: ${var.resource_name}
     node-label:
-    %{ for label in var.node_labels ~}
+    %{~ for label in var.node_labels ~}
       - ${label}
-    %{ endfor ~}
+    %{~ endfor ~}
   EOT
 
 
