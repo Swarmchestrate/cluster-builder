@@ -111,6 +111,12 @@ locals {
 
 }
 
+# Pre-rendered so the heredoc's `<<-` indentation stripping isn't defeated
+# by an inline %{ for ~} directive.
+locals {
+  node_labels_yaml = join("\n", [for label in var.node_labels : "  - ${label}"])
+}
+
 # Security Group Resource
 resource "openstack_networking_secgroup_v2" "k3s_sg" {
   count       = var.security_group_id == "" ? 1 : 0  # Only create if no SG ID is provided
@@ -219,9 +225,7 @@ resource "k3s_server" "k3s" {
   config = <<-EOT
     node-name: ${var.resource_name}
     node-label:
-    %{~ for label in var.node_labels ~}
-      - ${label}
-    %{~ endfor ~}
+    ${local.node_labels_yaml}
     cluster-name: ${var.cluster_name}
   EOT
 
@@ -247,9 +251,7 @@ resource "k3s_server" "k3s_ha_init" {
   config = <<-EOT
     node-name: ${var.resource_name}
     node-label:
-    %{~ for label in var.node_labels ~}
-      - ${label}
-    %{~ endfor ~}
+    ${local.node_labels_yaml}
     cluster-name: ${var.cluster_name}
   EOT
 
@@ -278,9 +280,7 @@ resource "k3s_server" "k3s_ha_join" {
   config = <<-EOT
     node-name: ${var.resource_name}
     node-label:
-    %{~ for label in var.node_labels ~}
-      - ${label}
-    %{~ endfor ~}
+    ${local.node_labels_yaml}
   EOT
 
   highly_available = {
@@ -313,9 +313,7 @@ resource "k3s_agent" "k3s" {
   config = <<-EOT
     node-name: ${var.resource_name}
     node-label:
-    %{~ for label in var.node_labels ~}
-      - ${label}
-    %{~ endfor ~}
+    ${local.node_labels_yaml}
   EOT
 
 
