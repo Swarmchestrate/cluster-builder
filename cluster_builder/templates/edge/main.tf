@@ -33,6 +33,12 @@ variable "ha" {
   default = false
 }
 
+variable "node_labels" {
+  description = "Optional k3s node labels in key=value form"
+  type        = list(string)
+  default     = []
+}
+
 # VALIDATION 
 locals {
   use_key_auth = var.ssh_auth_method == "key" && var.ssh_key != ""
@@ -61,7 +67,10 @@ resource "k3s_server" "k3s" {
 
   config = <<-EOT
     node-name: ${var.resource_name}
-    node-label: labels.swarmchestrate.eu/ms_id=${var.resource_name}
+    node-label:
+    %{ for label in var.node_labels ~}
+      - ${label}
+    %{ endfor ~}
     cluster-name: ${var.cluster_name}
   EOT
 }
@@ -82,7 +91,10 @@ resource "k3s_server" "k3s_ha_init" {
 
   config = <<-EOT
     node-name: ${var.resource_name}
-    node-label: labels.swarmchestrate.eu/ms_id=${var.resource_name}
+    node-label:
+    %{ for label in var.node_labels ~}
+      - ${label}
+    %{ endfor ~}
     cluster-name: ${var.cluster_name}
   EOT
 
@@ -104,7 +116,10 @@ resource "k3s_server" "k3s_ha_join" {
 
   config = <<-EOT
     node-name: ${var.resource_name}
-    node-label: labels.swarmchestrate.eu/ms_id=${var.resource_name}
+    node-label:
+    %{ for label in var.node_labels ~}
+      - ${label}
+    %{ endfor ~}
   EOT
 
   highly_available = {
@@ -130,7 +145,10 @@ resource "k3s_agent" "k3s" {
 
   config = <<-EOT
     node-name: ${var.resource_name}
-    node-label: labels.swarmchestrate.eu/ms_id=${var.resource_name}
+    node-label:
+    %{ for label in var.node_labels ~}
+      - ${label}
+    %{ endfor ~}
   EOT
   
 }

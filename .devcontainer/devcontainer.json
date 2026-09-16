@@ -1,11 +1,7 @@
 {
   "name": "cluster-builder",
   "image": "mcr.microsoft.com/devcontainers/python:1-3.12-bookworm",
-  "features": {
-    "ghcr.io/devcontainers/features/git:1": {},
-    "ghcr.io/devcontainers/features/github-cli:1": {}
-  },
-  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "postCreateCommand": "set -e; curl -fsSL --proto '=https' --tlsv1.2 https://get.opentofu.org/install-opentofu.sh -o /tmp/install-opentofu.sh && chmod +x /tmp/install-opentofu.sh && sudo /tmp/install-opentofu.sh --install-method standalone && rm -f /tmp/install-opentofu.sh && pip install --break-system-packages -e .",
   "customizations": {
     "vscode": {
       "extensions": [
@@ -13,6 +9,9 @@
         "hashicorp.terraform"
       ]
     }
+  },
+  "containerEnv": {
+    "HOME": "/home/vscode"
   },
   "remoteUser": "vscode"
 }
