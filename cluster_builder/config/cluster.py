@@ -19,9 +19,11 @@ logger = logging.getLogger("swarmchestrate")
 RFC_1123_LABEL_RE = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
 RFC_1123_MAX_LENGTH = 63
 
-# Unquoted PostgreSQL identifier: starts with a letter or underscore, followed
-# by letters, digits, or underscores, max 63 characters. No hyphens allowed.
-PG_IDENTIFIER_RE = re.compile(r"^[a-z_][a-z0-9_]{0,62}$")
+# Cluster name: starts with a lowercase letter or underscore, followed by
+# lowercase letters, digits, underscores, or hyphens, max 63 characters.
+# Hyphens are sanitized to underscores before use as the (unquoted) PostgreSQL
+# schema name — see hcl.add_backend_config().
+CLUSTER_NAME_RE = re.compile(r"^[a-z_][a-z0-9_-]{0,62}$")
 
 
 class ClusterConfig:
@@ -71,22 +73,21 @@ class ClusterConfig:
     @staticmethod
     def validate_pg_identifier_name(name: str, field_name: str) -> None:
         """
-        Validate that a name is a valid, unquoted PostgreSQL identifier (used
-        for cluster_name, which doubles as the Terraform state schema name).
+        Validate a cluster name (used for cluster_name, which doubles as the
+        Terraform state schema name once sanitized).
 
         Args:
             name: The name to validate
             field_name: Name of the field, used in the error message
 
         Raises:
-            ValueError: If the name is not a valid PostgreSQL identifier
+            ValueError: If the name is not a valid cluster name
         """
-        if not name or not PG_IDENTIFIER_RE.match(name):
+        if not name or not CLUSTER_NAME_RE.match(name):
             error_msg = (
                 f"Invalid {field_name} '{name}': must start with a lowercase "
                 "letter or underscore and contain only lowercase letters, "
-                "digits, and underscores (max 63 characters). Hyphens are not "
-                "permitted."
+                "digits, underscores, and hyphens (max 63 characters)."
             )
             logger.error(error_msg)
             raise ValueError(error_msg)

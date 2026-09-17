@@ -66,6 +66,10 @@ locals {
     { from = 53,    to = 53,    protocol = "udp", desc = "DNS for CoreDNS",      roles = ["master", "ha", "worker"] },
     { from = 5432,  to = 5432,  protocol = "tcp", desc = "PostgreSQL access",    roles = ["master"] }
   ]
+
+  # Pre-rendered so the heredoc's `<<-` indentation stripping isn't defeated
+  # by an inline %{ for ~} directive.
+  node_labels_yaml = join("\n", [for label in var.node_labels : "  - ${label}"])
 }
 
 resource "aws_security_group" "k3s_sg" {
@@ -157,9 +161,7 @@ resource "k3s_server" "k3s" {
   config = <<-EOT
     node-name: ${var.resource_name}
     node-label:
-    %{ for label in var.node_labels ~}
-      - ${label}
-    %{ endfor ~}
+    ${local.node_labels_yaml}
     cluster-name: ${var.cluster_name}
   EOT
 
@@ -181,9 +183,7 @@ resource "k3s_server" "k3s_ha_init" {
   config = <<-EOT
     node-name: ${var.resource_name}
     node-label:
-    %{ for label in var.node_labels ~}
-      - ${label}
-    %{ endfor ~}
+    ${local.node_labels_yaml}
     cluster-name: ${var.cluster_name}
   EOT
 
@@ -207,9 +207,7 @@ resource "k3s_server" "k3s_ha_join" {
   config = <<-EOT
     node-name: ${var.resource_name}
     node-label:
-    %{ for label in var.node_labels ~}
-      - ${label}
-    %{ endfor ~}
+    ${local.node_labels_yaml}
   EOT
 
   highly_available = {
@@ -237,9 +235,7 @@ resource "k3s_agent" "k3s" {
   config = <<-EOT
     node-name: ${var.resource_name}
     node-label:
-    %{ for label in var.node_labels ~}
-      - ${label}
-    %{ endfor ~}
+    ${local.node_labels_yaml}
   EOT
 
   depends_on = [aws_instance.k3s_node]
