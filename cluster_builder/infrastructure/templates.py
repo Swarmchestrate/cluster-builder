@@ -3,9 +3,9 @@ Template management for cluster deployments.
 """
 
 import filecmp
+import logging
 import os
 import shutil
-import logging
 
 from cluster_builder.utils.hcl import extract_template_variables
 
@@ -90,7 +90,7 @@ class TemplateManager:
             try:
                 shutil.copy2(src_path, dst_path)
                 logger.debug(f"Copied provider template {template_file} to {dst_path}")
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - wrap any copy failure into a RuntimeError
                 error_msg = f"Failed to copy provider template {template_file}: {e}"
                 logger.error(error_msg)
                 raise RuntimeError(error_msg)

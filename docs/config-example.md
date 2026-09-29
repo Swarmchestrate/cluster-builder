@@ -34,7 +34,12 @@ config = {
             "protocol": "tcp",
             "destination": "0.0.0.0/0"
         }
-        ]
+        ],
+    // Optional k3s node labels in key=value form
+    "node_labels": [
+        "environment=production",
+        "region=eu-west-1"
+    ]
 }
 ```
 
@@ -93,7 +98,7 @@ config = {
     "ssh_key": "/path/to/key.pem",  # required if ssh_auth_method == "key"
     # "ssh_password": "your_password",  # required if ssh_auth_method == "password"
     "k3s_token": "testtoken",
-    "k3s_role": "worker", # could be master or worker
-    "ha": False, # need this one only for master
-    }
+    "k3s_role": "worker",  # could be master or worker
+    "ha": False,  # need this one only for master
+}
 ```

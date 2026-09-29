@@ -33,9 +33,19 @@ variable "ha" {
   default = false
 }
 
+variable "node_labels" {
+  description = "Optional k3s node labels in key=value form"
+  type        = list(string)
+  default     = []
+}
+
 # VALIDATION 
 locals {
   use_key_auth = var.ssh_auth_method == "key" && var.ssh_key != ""
+
+  # Pre-rendered so the heredoc's `<<-` indentation stripping isn't defeated
+  # by an inline %{ for ~} directive.
+  node_labels_yaml = join("\n", [for label in var.node_labels : "  - ${label}"])
 }
 
 resource "null_resource" "validate_auth" {
@@ -61,7 +71,8 @@ resource "k3s_server" "k3s" {
 
   config = <<-EOT
     node-name: ${var.resource_name}
-    node-label: labels.swarmchestrate.eu/ms_id=${var.resource_name}
+    node-label:
+    ${local.node_labels_yaml}
     cluster-name: ${var.cluster_name}
   EOT
 }
@@ -82,7 +93,8 @@ resource "k3s_server" "k3s_ha_init" {
 
   config = <<-EOT
     node-name: ${var.resource_name}
-    node-label: labels.swarmchestrate.eu/ms_id=${var.resource_name}
+    node-label:
+    ${local.node_labels_yaml}
     cluster-name: ${var.cluster_name}
   EOT
 
@@ -104,7 +116,8 @@ resource "k3s_server" "k3s_ha_join" {
 
   config = <<-EOT
     node-name: ${var.resource_name}
-    node-label: labels.swarmchestrate.eu/ms_id=${var.resource_name}
+    node-label:
+    ${local.node_labels_yaml}
   EOT
 
   highly_available = {
@@ -130,9 +143,9 @@ resource "k3s_agent" "k3s" {
 
   config = <<-EOT
     node-name: ${var.resource_name}
-    node-label: labels.swarmchestrate.eu/ms_id=${var.resource_name}
+    node-label:
+    ${local.node_labels_yaml}
   EOT
-  
 }
 
 output "cluster_name" {

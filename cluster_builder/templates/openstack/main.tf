@@ -52,6 +52,12 @@ variable "custom_egress_ports" {
   default = []
 }
 
+variable "node_labels" {
+  description = "Optional k3s node labels in key=value form"
+  type        = list(string)
+  default     = []
+}
+
 # main.tf
 # Block storage for each node role
 resource "openstack_blockstorage_volume_v3" "root_volume" {
@@ -103,6 +109,12 @@ locals {
     }
   ] : []
 
+}
+
+# Pre-rendered so the heredoc's `<<-` indentation stripping isn't defeated
+# by an inline %{ for ~} directive.
+locals {
+  node_labels_yaml = join("\n", [for label in var.node_labels : "  - ${label}"])
 }
 
 # Security Group Resource
@@ -212,7 +224,8 @@ resource "k3s_server" "k3s" {
 
   config = <<-EOT
     node-name: ${var.resource_name}
-    node-label: labels.swarmchestrate.eu/ms_id=${var.resource_name}
+    node-label:
+    ${local.node_labels_yaml}
     cluster-name: ${var.cluster_name}
   EOT
 
@@ -237,7 +250,8 @@ resource "k3s_server" "k3s_ha_init" {
 
   config = <<-EOT
     node-name: ${var.resource_name}
-    node-label: labels.swarmchestrate.eu/ms_id=${var.resource_name}
+    node-label:
+    ${local.node_labels_yaml}
     cluster-name: ${var.cluster_name}
   EOT
 
@@ -265,7 +279,8 @@ resource "k3s_server" "k3s_ha_join" {
 
   config = <<-EOT
     node-name: ${var.resource_name}
-    node-label: labels.swarmchestrate.eu/ms_id=${var.resource_name}
+    node-label:
+    ${local.node_labels_yaml}
   EOT
 
   highly_available = {
@@ -297,7 +312,8 @@ resource "k3s_agent" "k3s" {
 
   config = <<-EOT
     node-name: ${var.resource_name}
-    node-label: labels.swarmchestrate.eu/ms_id=${var.resource_name}
+    node-label:
+    ${local.node_labels_yaml}
   EOT
 
 

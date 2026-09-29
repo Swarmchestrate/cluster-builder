@@ -77,7 +77,7 @@ This script removes a specific node from a cluster.
 
 ```python
 cluster_name = "boring_liskov"
-resource_name  = "aws_sweet_swanson"
+resource_name = "aws-sweet-swanson"
 ```
 Run the script to remove the node from the cluster.
 
@@ -136,6 +136,19 @@ To run the script:
 
 ```python
 python deploy_manifests.py
+```
+
+---
+
+### remove-manifest.py
+This script undeploys manifests previously applied by `deploy-manifest.py`. It removes the manifest files from the K3s server manifests folder (so K3s prunes their resources) and also deletes any Deployments/Services left in the `default` namespace by applications the manifests launched afterwards.
+
+Uses the same `manifest-config.json` as `deploy-manifest.py` (see above).
+
+To run the script:
+
+```python
+python remove-manifest.py
 ```
 
 ---

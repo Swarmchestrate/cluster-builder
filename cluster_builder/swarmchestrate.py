@@ -3,21 +3,22 @@ Swarmchestrate - Main orchestration class for K3s cluster management.
 """
 
 import json
-import os
 import logging
+import os
 import re
-from pathlib import Path
 import shutil
 import subprocess
-from typing import Optional, Any
-import psycopg2
-from openstack import connection
-from dotenv import load_dotenv
+import sys
+from pathlib import Path
+from typing import Any
 
-from cluster_builder.config.postgres import PostgresConfig
+import psycopg2
+from dotenv import load_dotenv
+from openstack import connection
+
 from cluster_builder.config.cluster import ClusterConfig
-from cluster_builder.infrastructure import TemplateManager
-from cluster_builder.infrastructure import CommandExecutor
+from cluster_builder.config.postgres import PostgresConfig
+from cluster_builder.infrastructure import CommandExecutor, TemplateManager
 from cluster_builder.utils import hcl
 
 logger = logging.getLogger("swarmchestrate")
@@ -32,7 +33,7 @@ class Swarmchestrate:
         self,
         template_dir: str,
         output_dir: str,
-        variables: Optional[dict[str, Any]] = None,
+        variables: dict[str, Any] | None = None,
     ):
         """
         Initialise the Swarmchestrate class.
@@ -263,7 +264,7 @@ class Swarmchestrate:
 
             return cluster_dir, prepared_config
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - wrap any preparation failure into a RuntimeError
             error_msg = f"❌ Failed to prepare infrastructure: {e}"
             logger.error(error_msg)
             raise RuntimeError(error_msg)
@@ -356,8 +357,7 @@ class Swarmchestrate:
             result = subprocess.run(
                 ["tofu", "output", "-json"],
                 cwd=cluster_dir,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                capture_output=True,
                 text=True,
                 check=True,
                 env=env_vars,
@@ -407,7 +407,7 @@ class Swarmchestrate:
             logger.error(error_msg)
             raise RuntimeError(error_msg)
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - wrap any deployment failure into a RuntimeError
             error_msg = f"❌ Failed to add node: {e}"
             logger.error(error_msg)
             raise RuntimeError(error_msg)
@@ -530,7 +530,7 @@ class Swarmchestrate:
             )
 
         except RuntimeError as e:
-            error_msg = f"❌ Failed to remove node '{resource_name}' from cluster '{cluster_name}': {str(e)}"
+            error_msg = f"❌ Failed to remove node '{resource_name}' from cluster '{cluster_name}': {e!s}"
             logger.error(error_msg)
             raise RuntimeError(error_msg)
 
@@ -561,7 +561,7 @@ class Swarmchestrate:
         # Check if the environment variables are set
         if not tf_log or not tf_log_path:
             print("❌ Error: Missing required environment variables.")
-            exit(1)
+            sys.exit(1)
 
         # Prepare environment variables for subprocess
         env_vars = os.environ.copy()
@@ -605,7 +605,7 @@ class Swarmchestrate:
                         env=env_vars,
                     )
                 except RuntimeError as e:
-                    error_msg = f"❌ Failed to create workspace '{workspace}': {str(e)}"
+                    error_msg = f"❌ Failed to create workspace '{workspace}': {e!s}"
                     logger.error(error_msg)
                     raise RuntimeError(error_msg)
 
@@ -618,7 +618,7 @@ class Swarmchestrate:
                     env=env_vars,
                 )
             except RuntimeError as e:
-                error_msg = f"❌ Failed to select workspace '{workspace}': {str(e)}"
+                error_msg = f"❌ Failed to select workspace '{workspace}': {e!s}"
                 logger.error(error_msg)
                 raise RuntimeError(error_msg)
 
@@ -650,7 +650,7 @@ class Swarmchestrate:
             logger.info("Infrastructure successfully updated")
 
         except RuntimeError as e:
-            error_msg = f"❌ Failed to deploy infrastructure: {str(e)}"
+            error_msg = f"❌ Failed to deploy infrastructure: {e!s}"
             logger.error(error_msg)
             raise RuntimeError(error_msg)
 
@@ -738,13 +738,12 @@ class Swarmchestrate:
                     current_role = role_match.group(1).lower()
 
                 if brace_depth <= 0:
-                    if current_module:
-                        if current_role:
-                            module_role[current_module] = current_role
+                    if current_module and current_role:
+                        module_role[current_module] = current_role
                     current_module = None
                     current_role = None
                     brace_depth = 0
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - best-effort metadata parsing, fall back on failure
             logger.debug(f"Could not parse module role metadata from main.tf: {e}")
 
         # ---------- STEP 1: collect role metadata ----------
@@ -834,7 +833,7 @@ class Swarmchestrate:
                 logger.info(f"✔ Destroyed {ws}")
 
             except RuntimeError as e:
-                logger.warning(f"⚠ Failed destroying {ws}: {str(e)}")
+                logger.warning(f"⚠ Failed destroying {ws}: {e!s}")
 
         # cleanup DB + folder
         self.remove_cluster_schema_from_db(cluster_name)
@@ -997,6 +996,113 @@ class Swarmchestrate:
         finally:
             if copy_dir.exists():
                 shutil.rmtree(copy_dir)
+
+    def remove_manifests(
+        self,
+        manifest_folder: str,
+        master_ip: str,
+        ssh_user: str,
+        ssh_key: str = "",
+        ssh_key_path: str = "",
+        ssh_port: int = 22,
+        ssh_auth_method: str = "key",
+        ssh_password: str = "",
+    ):
+        """
+        Remove previously deployed manifests from a cluster using remove_manifest.tf
+        in a temporary folder. Deletes the manifest files (matching the names found in
+        manifest_folder) from the K3s server manifests directory, which causes K3s to
+        prune the associated resources.
+
+        Args:
+            manifest_folder: Path to local manifest folder (used to determine file names)
+            master_ip: IP address of K3s master
+            ssh_key: Path to SSH private key (preferred)
+            ssh_key_path: Deprecated alias for ssh_key
+            ssh_user: SSH username to connect to the master node
+            ssh_port: SSH port for the master node (defaults to 22)
+            ssh_auth_method: SSH auth method, either "key" or "password"
+            ssh_password: SSH password when ssh_auth_method is "password"
+        """
+        resolved_ssh_key = ssh_key or ssh_key_path
+
+        if ssh_auth_method not in {"key", "password"}:
+            raise ValueError("ssh_auth_method must be either 'key' or 'password'")
+
+        if ssh_auth_method == "key" and not resolved_ssh_key:
+            raise ValueError("ssh_key is required when ssh_auth_method is 'key'")
+
+        if ssh_auth_method == "password" and not ssh_password:
+            raise ValueError(
+                "ssh_password is required when ssh_auth_method is 'password'"
+            )
+
+        # Dedicated folder for remove-manifest operations
+        remove_dir = Path(self.output_dir) / "remove-manifest"
+        remove_dir.mkdir(parents=True, exist_ok=True)
+
+        logger.debug(f"Using remove-manifest folder: {remove_dir}")
+
+        try:
+            # Copy remove_manifest.tf from templates
+            tf_source_file = (
+                Path(self.template_manager.templates_dir) / "remove_manifest.tf"
+            )
+            if not tf_source_file.exists():
+                logger.debug(f"remove_manifest.tf not found at: {tf_source_file}")
+                raise RuntimeError(f"remove_manifest.tf not found at: {tf_source_file}")
+            shutil.copy(tf_source_file, remove_dir)
+            logger.debug(f"Copied remove_manifest.tf to {remove_dir}")
+
+            # Prepare environment for OpenTofu
+            env_vars = os.environ.copy()
+            env_vars["TF_LOG"] = os.getenv("TF_LOG", "INFO")
+            env_vars["TF_LOG_PATH"] = os.getenv("TF_LOG_PATH", "/tmp/opentofu.log")
+
+            logger.info(
+                f"------------ Removing manifests from node: {master_ip} -------------------"
+            )
+
+            # Run tofu init with spinner
+            CommandExecutor.run_command(
+                ["tofu", "init"],
+                cwd=str(remove_dir),
+                description="OpenTofu init",
+                env=env_vars,
+            )
+
+            # Run tofu apply with spinner
+            apply_vars = [
+                f"-var=manifest_folder={manifest_folder}",
+                f"-var=master_ip={master_ip}",
+                f"-var=ssh_user={ssh_user}",
+                f"-var=ssh_port={ssh_port}",
+                f"-var=ssh_auth_method={ssh_auth_method}",
+            ]
+
+            if ssh_auth_method == "key":
+                apply_vars.append(f"-var=ssh_key={resolved_ssh_key}")
+            else:
+                apply_vars.append(f"-var=ssh_password={json.dumps(ssh_password)}")
+
+            CommandExecutor.run_command(
+                ["tofu", "apply", "-auto-approve"] + apply_vars,
+                cwd=str(remove_dir),
+                description="OpenTofu apply",
+                env=env_vars,
+            )
+
+            logger.info(
+                "------------ Successfully removed manifests -------------------"
+            )
+
+        except RuntimeError as e:
+            print(f"\n---------- ERROR ----------\n{e}\n")
+            raise
+
+        finally:
+            if remove_dir.exists():
+                shutil.rmtree(remove_dir)
 
     def create_registry_secrets(self, cluster_config: dict):
         """

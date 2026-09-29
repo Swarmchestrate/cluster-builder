@@ -138,6 +138,10 @@ celerybeat.pid
 .env
 .venv
 env/
+
+# SSH private keys (never commit these)
+*.pem
+
 venv/
 ENV/
 env.bak/

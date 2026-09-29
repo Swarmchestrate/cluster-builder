@@ -1,7 +1,8 @@
 import json
+import logging
+
 from cluster_builder import Swarmchestrate
 from demo.utils import read_outputs
-import logging
 
 logger = logging.getLogger("k3s_worker")
 

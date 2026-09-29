@@ -4,12 +4,9 @@ Logging configuration for the cluster builder.
 
 import logging
 import sys
-from typing import Optional
 
 
-def configure_logging(
-    level: int = logging.INFO, log_file: Optional[str] = None
-) -> None:
+def configure_logging(level: int = logging.INFO, log_file: str | None = None) -> None:
     """
     Configure or reconfigure logging for the cluster builder.
 
