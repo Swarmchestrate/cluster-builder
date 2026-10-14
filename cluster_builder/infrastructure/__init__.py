@@ -8,7 +8,7 @@ from cluster_builder.infrastructure.templates import TemplateManager
 
 __all__ = [
 	"CommandExecutor",
-	"TemplateManager",
 	"HeadscaleClient",
 	"HeadscaleConfig",
+	"TemplateManager",
 ]
