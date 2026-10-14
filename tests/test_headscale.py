@@ -1,7 +1,8 @@
 
-import requests
-import pytest
 from unittest.mock import Mock
+
+import pytest
+import requests
 
 from cluster_builder.infrastructure.headscale import (
     HeadscaleAPIError,
@@ -11,7 +12,6 @@ from cluster_builder.infrastructure.headscale import (
     HeadscaleConnectionError,
     HeadscaleResponseError,
 )
-
 
 BASE_URL = "http://headscale.test"
 
