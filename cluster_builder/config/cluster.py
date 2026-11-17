@@ -71,6 +71,11 @@ class ClusterConfig:
             raise ValueError(error_msg)
 
     @staticmethod
+    def _normalize_resource_name(name: str) -> str:
+        """Replace underscores with hyphens in resource names."""
+        return name.replace("_", "-")
+
+    @staticmethod
     def validate_pg_identifier_name(name: str, field_name: str) -> None:
         """
         Validate a cluster name (used for cluster_name, which doubles as the
@@ -112,8 +117,7 @@ class ClusterConfig:
         Returns:
             A randomly generated name
         """
-        name = generate_name()
-        name = name.replace("_", "-")
+        name = self._normalize_resource_name(generate_name())
         logger.debug(f"Generated random name: {name}")
         return name
 
@@ -216,6 +220,15 @@ class ClusterConfig:
             logger.debug(
                 f" Using provided Resource name: {prepared_config['resource_name']}"
             )
+        resource_name = prepared_config["resource_name"]
+        normalized_resource_name = self._normalize_resource_name(resource_name)
+        if normalized_resource_name != resource_name:
+            logger.info(
+                "Normalized resource_name '%s' to '%s' for RFC 1123 compliance",
+                resource_name,
+                normalized_resource_name,
+            )
+            prepared_config["resource_name"] = normalized_resource_name
         self.validate_rfc1123_name(prepared_config["resource_name"], "resource_name")
 
         # Create the cluster directory
