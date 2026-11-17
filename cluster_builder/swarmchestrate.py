@@ -434,6 +434,7 @@ class Swarmchestrate:
         logger.info(
             f"------------ Removing node '{resource_name}' from cluster '{cluster_name}' ------------"
         )
+        module_name = hcl.sanitize_module_name(resource_name)
 
         # Get the directory for the specified cluster
         cluster_dir = self.get_cluster_output_dir(cluster_name)
@@ -457,25 +458,25 @@ class Swarmchestrate:
             # Select the workspace
             if not dryrun:
                 CommandExecutor.run_command(
-                    ["tofu", "workspace", "select", resource_name],
+                    ["tofu", "workspace", "select", module_name],
                     cwd=cluster_dir,
-                    description=f"Selecting workspace '{resource_name}'",
+                    description=f"Selecting workspace '{module_name}'",
                     env=env_vars,
                 )
             else:
-                logger.info(f"Dryrun: select workspace '{resource_name}'")
+                logger.info(f"Dryrun: select workspace '{module_name}'")
 
             # Destroy the infrastructure
             if not dryrun:
                 CommandExecutor.run_command(
                     ["tofu", "destroy", "-auto-approve"],
                     cwd=cluster_dir,
-                    description=f"Destroying infrastructure for '{resource_name}'",
+                    description=f"Destroying infrastructure for '{module_name}'",
                     env=env_vars,
                 )
             else:
                 logger.info(
-                    f"Dryrun: would destroy infrastructure for '{resource_name}'"
+                    f"Dryrun: would destroy infrastructure for '{module_name}'"
                 )
 
             # Switch back to default workspace
@@ -490,8 +491,8 @@ class Swarmchestrate:
                 logger.info("Dryrun: would switch back to default workspace")
 
             # Remove module block from main.tf
-            hcl.remove_module_block(main_tf_path, resource_name)
-            logger.info(f"Removed module block for '{resource_name}'")
+            hcl.remove_module_block(main_tf_path, module_name)
+            logger.info(f"Removed module block for '{module_name}'")
 
             # Delete outputs.tf entirely (optional, safer for decentralized setup)
             outputs_tf_path = os.path.join(cluster_dir, "outputs.tf")
@@ -517,13 +518,13 @@ class Swarmchestrate:
             # Delete the workspace
             if not dryrun:
                 CommandExecutor.run_command(
-                    ["tofu", "workspace", "delete", "-force", resource_name],
+                    ["tofu", "workspace", "delete", "-force", module_name],
                     cwd=cluster_dir,
-                    description=f"Deleting workspace '{resource_name}'",
+                    description=f"Deleting workspace '{module_name}'",
                     env=env_vars,
                 )
             else:
-                logger.info(f"Dryrun: would delete workspace '{resource_name}'")
+                logger.info(f"Dryrun: would delete workspace '{module_name}'")
 
             logger.info(
                 f"----------- Removal of node '{resource_name}' from cluster '{cluster_name}' complete -----------"
