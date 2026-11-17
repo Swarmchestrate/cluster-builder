@@ -118,6 +118,8 @@ Notes:
 
 - The configuration file defines all required parameters for the node, including cloud provider, K3s role, SSH info, and optional network/security settings.
 
+- Underscores in `resource_name` are converted to hyphens before validation and deployment. For example, `worker_node_01` becomes the node name `worker-node-01`.
+
 
 ### Removing a Specific Node
 
@@ -130,6 +132,8 @@ orchestrator.remove_node(
     resource_name="eloquent-feynman",  # The resource identifier of the node
 )
 ```
+
+For names that contained underscores when added, you can pass either the original name or its normalized hyphenated form. For example, both `worker_node_01` and `worker-node-01` identify the node deployed as `worker-node-01`.
 
 The **remove_node** method:
 1. Destroys the node's infrastructure resources
