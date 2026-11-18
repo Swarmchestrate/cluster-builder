@@ -41,9 +41,7 @@ def test_prepare_still_rejects_resource_names_invalid_after_normalization(tmp_pa
 
 
 @pytest.mark.parametrize("resource_name", ["worker_node_01", "worker-node-01"])
-def test_remove_node_uses_sanitized_module_name(
-    tmp_path, monkeypatch, resource_name
-):
+def test_remove_node_uses_sanitized_module_name(tmp_path, monkeypatch, resource_name):
     orchestrator = Swarmchestrate.__new__(Swarmchestrate)
     monkeypatch.setattr(
         orchestrator, "get_cluster_output_dir", lambda cluster_name: str(tmp_path)

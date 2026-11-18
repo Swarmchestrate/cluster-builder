@@ -475,9 +475,7 @@ class Swarmchestrate:
                     env=env_vars,
                 )
             else:
-                logger.info(
-                    f"Dryrun: would destroy infrastructure for '{module_name}'"
-                )
+                logger.info(f"Dryrun: would destroy infrastructure for '{module_name}'")
 
             # Switch back to default workspace
             if not dryrun:

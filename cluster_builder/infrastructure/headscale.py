@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class HeadscaleConfig:
-    #Configuration required to connect to Headscale.
+    # Configuration required to connect to Headscale.
 
     base_url: str
     api_key: str
@@ -85,9 +85,7 @@ class HeadscaleClient:
     # Internal request handling
     # ------------------------------------------------------------------
 
-    def _request(
-        self, method: str, url: str, **kwargs: Any
-    ) -> requests.Response:
+    def _request(self, method: str, url: str, **kwargs: Any) -> requests.Response:
         """Send an HTTP request and translate common errors."""
 
         kwargs.setdefault("timeout", self.timeout)
@@ -109,9 +107,7 @@ class HeadscaleClient:
 
         except requests.exceptions.RequestException as exc:
             logger.exception("Headscale request failed: %s", url)
-            raise HeadscaleError(
-                f"Headscale request failed: {exc}"
-            ) from exc
+            raise HeadscaleError(f"Headscale request failed: {exc}") from exc
 
         if response.status_code in (401, 403):
             logger.warning(
@@ -166,8 +162,7 @@ class HeadscaleClient:
             isinstance(item, dict) for item in items
         ):
             raise HeadscaleResponseError(
-                f"Unexpected Headscale response: '{field}' "
-                "must be a list of objects."
+                f"Unexpected Headscale response: '{field}' must be a list of objects."
             )
 
         return items

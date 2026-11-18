@@ -1,4 +1,3 @@
-
 from unittest.mock import Mock
 
 import pytest
@@ -30,9 +29,7 @@ def test_create_user(client, monkeypatch):
     response = Mock()
     response.status_code = 200
     response.ok = True
-    response.json.return_value = {
-        "user": {"id": "123", "name": "alice"}
-    }
+    response.json.return_value = {"user": {"id": "123", "name": "alice"}}
 
     request = Mock(return_value=response)
     monkeypatch.setattr(client.session, "request", request)
@@ -51,9 +48,7 @@ def test_list_users(client, monkeypatch):
     response = Mock()
     response.status_code = 200
     response.ok = True
-    response.json.return_value = {
-        "users": [{"id": "123", "name": "alice"}]
-    }
+    response.json.return_value = {"users": [{"id": "123", "name": "alice"}]}
 
     request = Mock(return_value=response)
     monkeypatch.setattr(client.session, "request", request)
@@ -71,16 +66,12 @@ def test_create_preauth_key(client, monkeypatch):
     response = Mock()
     response.status_code = 200
     response.ok = True
-    response.json.return_value = {
-        "preAuthKey": {"key": "example-key"}
-    }
+    response.json.return_value = {"preAuthKey": {"key": "example-key"}}
 
     request = Mock(return_value=response)
     monkeypatch.setattr(client.session, "request", request)
 
-    result = client.create_preauth_key(
-        "alice", reusable=True, ephemeral=True
-    )
+    result = client.create_preauth_key("alice", reusable=True, ephemeral=True)
 
     assert result == {"preAuthKey": {"key": "example-key"}}
 
@@ -98,9 +89,7 @@ def test_list_nodes(client, monkeypatch):
     response = Mock()
     response.status_code = 200
     response.ok = True
-    response.json.return_value = {
-        "nodes": [{"id": "node-1"}]
-    }
+    response.json.return_value = {"nodes": [{"id": "node-1"}]}
 
     request = Mock(return_value=response)
     monkeypatch.setattr(client.session, "request", request)
@@ -129,9 +118,7 @@ def test_list_nodes(client, monkeypatch):
         ),
     ],
 )
-def test_delete_operations(
-    client, monkeypatch, method, resource_id, expected_url
-):
+def test_delete_operations(client, monkeypatch, method, resource_id, expected_url):
     response = Mock()
     response.status_code = 200
     response.ok = True
