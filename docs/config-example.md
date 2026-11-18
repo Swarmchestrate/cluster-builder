@@ -1,5 +1,9 @@
 # aws example:
 
+If `resource_name` contains underscores, they are converted to hyphens before
+validation and deployment. For example, `worker_node_01` becomes
+`worker-node-01`.
+
 ```python
 config = {
     "cloud": "aws",
