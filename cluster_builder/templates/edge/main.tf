@@ -45,7 +45,7 @@ locals {
 
   # Pre-rendered so the heredoc's `<<-` indentation stripping isn't defeated
   # by an inline %{ for ~} directive.
-  node_labels_yaml = join("\n", [for label in var.node_labels : "  - ${label}"])
+  node_labels_yaml = join("\n", [for label in concat(var.node_labels, ["labels.swarmchestrate.eu/ms_id=${var.resource_name}"]) : "  - ${label}"])
 }
 
 resource "null_resource" "validate_auth" {
