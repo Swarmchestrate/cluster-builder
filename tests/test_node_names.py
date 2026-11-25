@@ -60,7 +60,7 @@ def test_node_configs_include_resource_name_label(tmp_path, node_labels, cloud):
         assert config["node-name"] == "worker-node-01"
         assert config["node-label"] == [
             *node_labels,
-            "labels.swarmchestrate.eu/ms_id=worker-node-01",
+            "labels.swarmchestrate.eu/resource_name=worker-node-01",
         ]
 
 

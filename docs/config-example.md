@@ -3,7 +3,7 @@ validation and deployment. For example, `worker_node_01` becomes
 `worker-node-01`.
 
 AWS, OpenStack, and edge nodes automatically receive the k3s label
-`labels.swarmchestrate.eu/ms_id=<resource_name>` in addition to any
+`labels.swarmchestrate.eu/resource_name=<resource_name>` in addition to any
 `node_labels` supplied in the configuration.
 
 # aws example:
